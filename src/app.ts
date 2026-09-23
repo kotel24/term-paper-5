@@ -12,6 +12,7 @@ import { sfx } from './audio/sfx';
 import { STEPS, VIEWS } from './scenario/steps';
 import { Trainer } from './scenario/trainer';
 import type { Ctx, MachineState, Target } from './scenario/types';
+import type { ARStage, Surface } from './ar/arStage';
 
 const $ = (id: string) => document.getElementById(id)!;
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -56,6 +57,7 @@ export class App {
   private mode: '3d' | 'ar' | null = null;
   private idleSpin: gsap.core.Tween | null = null;
   private frameHook: ((dt: number, t: number) => void) | null = null;
+  private surface: Surface = 'table';
 
   constructor() {
     this.hud.show(false);
@@ -90,8 +92,12 @@ export class App {
       this.s?.ctx?.focus('overview', 1.4);
     });
     $('scanBack').addEventListener('click', () => void this.home());
+    $('scanSurface').addEventListener('click', () => this.toggleSurface());
+    $('mSurface').addEventListener('click', () => this.toggleSurface());
     this.loadSound();
     this.renderSoundState();
+    this.loadSurface();
+    this.renderSurfaceState();
     this.bootPreview();
     this.introAnimation();
     this.mountFrameLoop();
@@ -282,7 +288,7 @@ export class App {
     gsap.fromTo(loading, { opacity: 0 }, { opacity: 1, duration: 0.3 });
     this.teardown();
     const { ARStage } = await import('./ar/arStage');
-    const stage = new ARStage(this.stageHost, './targets/marker.mind');
+    const stage = new ARStage(this.stageHost, './targets/marker.mind', this.surface);
     const s = this.makeSession(stage);
     this.s = s;
     stage.onFrame((dt, t) => this.frameHook?.(dt, t));
@@ -404,5 +410,32 @@ export class App {
 
   private renderSoundState(): void {
     $('mSound').innerHTML = `${sfx.muted ? ICON.mute : ICON.sound}<span>${sfx.muted ? 'Звук выключен' : 'Звук включён'}</span>`;
+  }
+
+  private loadSurface(): void {
+    try {
+      this.surface = localStorage.getItem('surface') === 'wall' ? 'wall' : 'table';
+    } catch {
+      this.surface = 'table';
+    }
+  }
+
+  private toggleSurface(): void {
+    this.surface = this.surface === 'table' ? 'wall' : 'table';
+    try {
+      localStorage.setItem('surface', this.surface);
+    } catch {
+      void 0;
+    }
+    const stage = this.s?.stage;
+    if (stage?.kind === 'ar') (stage as ARStage).setSurface(this.surface);
+    this.renderSurfaceState();
+  }
+
+  private renderSurfaceState(): void {
+    const wall = this.surface === 'wall';
+    const label = wall ? 'Маркер на стене или экране' : 'Маркер на столе';
+    $('mSurface').innerHTML = `${ICON.cube}<span>${label}</span>`;
+    $('scanSurface').textContent = label;
   }
 }

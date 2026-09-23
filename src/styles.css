@@ -1676,3 +1676,15 @@ body.ar:not(.tracking) #hotspots {
     animation: none;
   }
 }
+
+.scan-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+body:not(.ar) #mSurface {
+  display: none;
+}

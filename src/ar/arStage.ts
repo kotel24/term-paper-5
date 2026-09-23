@@ -1,10 +1,13 @@
 import * as THREE from 'three';
+import gsap from 'gsap';
 import type { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js';
 import { makeEnvironment, makeLights, now, type FrameFn, type Lights, type Stage } from '../core/stage';
 
 const MODEL_SCALE = 0.42;
 const CENTER_X = 0.36;
 const CENTER_Z = 0.15;
+
+export type Surface = 'table' | 'wall';
 
 export class ARStage implements Stage {
   readonly kind = 'ar' as const;
@@ -20,10 +23,14 @@ export class ARStage implements Stage {
   private lights: Lights;
   private shadowScale = 0;
   private trackingListeners: ((v: boolean) => void)[] = [];
+  private placement = new THREE.Group();
+  private catcher: THREE.Mesh | null = null;
+  private surface: Surface;
   private onResize = () => this.mind && (this.mind as unknown as { resize(): void }).resize();
 
-  constructor(container: HTMLElement, private targetSrc: string) {
+  constructor(container: HTMLElement, private targetSrc: string, surface: Surface = 'table') {
     this.dom = container;
+    this.surface = surface;
     this.lights = makeLights();
   }
 
@@ -60,18 +67,20 @@ export class ARStage implements Stage {
     this.scene.environmentIntensity = 0.6;
 
     const anchor = mind.addAnchor(0);
-    const placement = new THREE.Group();
-    placement.rotation.x = Math.PI / 2;
+    const placement = this.placement;
     placement.scale.setScalar(MODEL_SCALE);
     this.content.position.set(-CENTER_X, 0, -CENTER_Z);
     placement.add(this.content);
     anchor.group.add(placement);
+    this.applySurface(0);
     this.content.add(this.lights.group);
 
     const catcher = new THREE.Mesh(new THREE.PlaneGeometry(3, 2.4), new THREE.ShadowMaterial({ opacity: 0.38 }));
     catcher.rotation.x = -Math.PI / 2;
     catcher.position.set(0.35, 0, 0.2);
     catcher.receiveShadow = true;
+    catcher.visible = this.surface === 'table';
+    this.catcher = catcher;
     this.content.add(catcher);
 
     anchor.onTargetFound = () => this.setTracked(true);
@@ -81,6 +90,28 @@ export class ARStage implements Stage {
     window.addEventListener('resize', this.onResize);
     this.last = now();
     this.renderer.setAnimationLoop(() => this.tick());
+  }
+
+  setSurface(mode: Surface): void {
+    if (mode === this.surface) return;
+    this.surface = mode;
+    this.applySurface(0.7);
+  }
+
+  private applySurface(duration: number): void {
+    const rx = this.surface === 'table' ? Math.PI / 2 : 0;
+    const y = this.surface === 'table' ? 0 : -0.45;
+    const z = this.surface === 'table' ? 0 : 0.24;
+    if (this.catcher) this.catcher.visible = this.surface === 'table';
+    gsap.killTweensOf(this.placement.rotation);
+    gsap.killTweensOf(this.placement.position);
+    if (duration <= 0) {
+      this.placement.rotation.x = rx;
+      this.placement.position.set(0, y, z);
+      return;
+    }
+    gsap.to(this.placement.rotation, { x: rx, duration, ease: 'power2.inOut' });
+    gsap.to(this.placement.position, { y, z, duration, ease: 'power2.inOut' });
   }
 
   private setTracked(v: boolean): void {

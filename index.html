@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#14181b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Тренажёр 2Н135</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23ffc21a'/%3E%3Cpath d='M22 10h20v10H22zM26 20h12v14H26zM30 34h4v16l-2 4-2-4z' fill='%23161a1d'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="stage"></div>
+
+    <div id="hud" class="hidden">
+      <div id="hotspots"></div>
+
+      <header class="topbar">
+        <button id="menuBtn" class="icon-btn" aria-label="Меню"></button>
+        <div class="tb-center">
+          <div class="tb-text"><span id="tbStep">Шаг 1 из 7</span><b id="tbName"></b></div>
+          <div id="progress" class="progress"></div>
+        </div>
+        <div class="stats">
+          <span class="stat" title="Время"><i data-icon="clock"></i><b id="stTime">00:00</b></span>
+          <span class="stat err" title="Ошибки"><i data-icon="warn"></i><b id="stErr">0</b></span>
+          <span class="stat hint" title="Подсказки"><i data-icon="bulb"></i><b id="stHint">0</b></span>
+        </div>
+      </header>
+
+      <div id="toasts"></div>
+      <div id="pill" class="pill hidden"></div>
+      <div id="gauge" class="gauge hidden"></div>
+
+      <section id="card" class="card">
+        <div class="card-head">
+          <span id="cardNum" class="card-num">1</span>
+          <h2 id="cardTitle"></h2>
+          <button id="collapseBtn" class="icon-btn small" aria-label="Свернуть"></button>
+        </div>
+        <div class="card-body">
+          <p id="cardText"></p>
+          <div id="panelSlot"></div>
+          <ul id="checklist" class="checklist"></ul>
+          <div id="hintBox" class="hint-box hidden"></div>
+          <div id="whyBox" class="why-box hidden"></div>
+        </div>
+        <div class="card-actions">
+          <button id="hintBtn" class="btn ghost"><i data-icon="bulb"></i>Подсказка</button>
+          <button id="nextBtn" class="btn primary" disabled>Далее</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="banner" class="banner hidden"></div>
+
+    <div id="alert" class="overlay alert hidden">
+      <div class="alert-box">
+        <div class="alert-icon" data-icon="warn"></div>
+        <div class="alert-kicker">Нарушение техники безопасности</div>
+        <h3 id="alertTitle"></h3>
+        <p id="alertText"></p>
+        <button id="alertOk" class="btn danger">Понятно</button>
+      </div>
+    </div>
+
+    <div id="finish" class="overlay finish hidden"></div>
+
+    <div id="menu" class="overlay menu hidden">
+      <div class="menu-box">
+        <div class="menu-head">
+          <b>Меню</b>
+          <button id="menuClose" class="icon-btn small" aria-label="Закрыть"></button>
+        </div>
+        <button id="mView" class="menu-item"><i data-icon="cube"></i><span>Общий вид станка</span></button>
+        <button id="mSound" class="menu-item"></button>
+        <button id="mRestart" class="menu-item"><i data-icon="restart"></i><span>Начать обучение заново</span></button>
+        <button id="mHome" class="menu-item"><i data-icon="home"></i><span>Выйти на главный экран</span></button>
+      </div>
+    </div>
+
+    <div id="loading" class="overlay loading hidden">
+      <div class="spinner"></div>
+      <b>Запускаем камеру</b>
+      <span>Разрешите доступ к камере, если браузер спросит</span>
+    </div>
+
+    <div id="scan" class="scan hidden">
+      <div class="scan-frame"><i></i><i></i><i></i><i></i><div class="scan-line"></div></div>
+      <div class="scan-text">
+        <b>Наведите камеру на маркер</b>
+        <span>Плакат «Тренажёр 2Н135» должен целиком попасть в рамку</span>
+      </div>
+      <button id="scanBack" class="btn ghost small">Назад</button>
+    </div>
+
+    <section id="start" class="start">
+      <div class="start-inner">
+        <div class="st-badge"><i data-icon="shield"></i>Охрана труда · Машиностроение</div>
+        <h1 class="st-title">Вертикально-сверлильный станок <span>2Н135</span></h1>
+        <p class="st-sub">Интерактивный тренажёр «Подготовка станка и сверление отверстия». Выполняйте действия на модели станка — тренажёр подскажет порядок и объяснит, почему это важно.</p>
+        <ol class="st-steps">
+          <li>Средства защиты</li>
+          <li>Осмотр станка</li>
+          <li>Закрепление заготовки</li>
+          <li>Установка сверла</li>
+          <li>Режимы резания</li>
+          <li>Пробный пуск</li>
+          <li>Сверление отверстия</li>
+        </ol>
+        <div class="st-actions">
+          <button id="startAr" class="btn primary big"><i data-icon="camera"></i>Обучение в AR</button>
+          <button id="start3d" class="btn ghost big"><i data-icon="cube"></i>Обучение в 3D</button>
+        </div>
+        <p class="st-note">Для AR распечатайте <a href="./targets/marker.png" target="_blank" rel="noopener">маркер</a> или откройте его на другом экране.</p>
+      </div>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

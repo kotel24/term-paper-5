@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Генератор маркера</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        font: 15px/1.4 system-ui, sans-serif;
+        background: #14181b;
+        color: #e8eaec;
+      }
+      #status {
+        margin: 12px 0;
+        font-weight: 600;
+      }
+      canvas {
+        max-width: 420px;
+        width: 100%;
+        height: auto;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Маркер «Тренажёр 2Н135»</h1>
+    <div id="status">Подготовка…</div>
+    <div id="out"></div>
+    <script type="module" src="./marker.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "webar-trainer-2n135",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:phone": "HTTPS=1 vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "HTTPS=1 vite preview --host"
+  },
+  "dependencies": {
+    "gsap": "^3.15.0",
+    "mind-ar": "^1.2.5",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  }
+}

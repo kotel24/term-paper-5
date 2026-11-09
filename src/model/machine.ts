@@ -359,7 +359,7 @@ export class Machine {
     wg.rotateY(-Math.PI / 2);
     wg.translate(0.04, 0, 0);
     put(t, mesh(wg, M.paint), 0, TABLE_TOP - 0.06, 0.17);
-    put(t, rbox(0.5, 0.06, 0.45, 0.012, M.yellow), AX, TABLE_TOP - 0.03, AZ);
+    put(t, rbox(0.5, 0.06, 0.45, 0.012, M.yellow), AX, TABLE_TOP - 0.033, AZ);
     put(t, box(0.49, 0.004, 0.44, M.machined), AX, TABLE_TOP - 0.002, AZ);
     for (const x of [-0.12, 0, 0.12]) {
       put(t, box(0.02, 0.002, 0.442, M.slot), x, TABLE_TOP + 0.0005, AZ);

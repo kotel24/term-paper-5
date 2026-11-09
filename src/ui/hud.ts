@@ -39,6 +39,7 @@ export class Hud {
   private hintBtn = $<HTMLButtonElement>('hintBtn');
   private progressEl = $('progress');
   private items: HTMLLIElement[] = [];
+  private labels: string[] = [];
   private nextHandler: (() => void) | null = null;
   private resizeListeners: ((h: number) => void)[] = [];
   private lastInset = -1;
@@ -123,12 +124,21 @@ export class Hud {
 
   setChecklist(labels: string[]): void {
     this.checklist.innerHTML = '';
-    this.items = labels.map((l) => {
+    this.labels = labels;
+    this.items = labels.map((_, i) => {
       const li = document.createElement('li');
-      li.innerHTML = `<span class="ck">${ICON.check}</span><span class="lb">${esc(l)}</span>`;
+      li.dataset.hidden = '';
+      li.innerHTML = `<span class="ck">${ICON.check}</span><span class="lb">Действие ${i + 1}</span>`;
       this.checklist.appendChild(li);
       return li;
     });
+  }
+
+  revealItem(i: number): void {
+    const li = this.items[i];
+    if (!li || li.dataset.hidden === undefined) return;
+    delete li.dataset.hidden;
+    li.querySelector('.lb')!.textContent = this.labels[i];
   }
 
   setItemState(i: number, s: ItemState): void {
@@ -136,6 +146,7 @@ export class Hud {
     if (!li) return;
     const was = li.dataset.state;
     li.dataset.state = s;
+    if (s === 'done') this.revealItem(i);
     if (s === 'done' && was !== 'done') {
       gsap.fromTo(li, { backgroundColor: 'rgba(58,211,122,0.28)' }, { backgroundColor: 'rgba(58,211,122,0)', duration: 1.2 });
     }

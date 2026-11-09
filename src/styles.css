@@ -570,6 +570,11 @@ body.ar #stage video {
   transition: all 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.4);
 }
 
+.checklist li[data-hidden] .lb {
+  font-style: italic;
+  opacity: 0.6;
+}
+
 .checklist li[data-state='active'] {
   color: var(--text);
   background: rgba(255, 194, 26, 0.08);

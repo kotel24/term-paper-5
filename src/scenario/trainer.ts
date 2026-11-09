@@ -24,6 +24,7 @@ export class Trainer {
   private log: { step: string; title: string; message: string }[] = [];
   private hints = 0;
   private wrongStreak = 0;
+  private hinted: string | null = null;
   private startedAt = 0;
   private elapsed = 0;
   private hotspotKey = '';
@@ -97,6 +98,7 @@ export class Trainer {
     this.done.clear();
     this.busy = true;
     this.wrongStreak = 0;
+    this.hinted = null;
     const s = this.step;
     this.hud.setProgress(i, 0);
     this.hotspots.clear();
@@ -142,8 +144,8 @@ export class Trainer {
     if (this.locked) {
       this.highlighter.clear();
     } else {
-      const objs = avail.filter((a) => a.target).map((a) => this.targets[a.target!].obj);
-      this.highlighter.set(objs);
+      const h = avail.find((a) => a.id === this.hinted && a.target);
+      this.highlighter.set(h ? [this.targets[h.target!].obj] : []);
       if (s.ordered && avail[0] && avail[0].target && avail[0].view) this.ctx.focus(avail[0].view, 1.3);
       const auto = avail.find((a) => a.auto);
       if (auto) void this.run(auto);
@@ -217,7 +219,7 @@ export class Trainer {
       this.hud.toast('Подсказка: нажмите на подсвеченный элемент', 'info');
       this.showHint(false);
     } else {
-      this.hud.toast('Сейчас нужно другое действие — смотрите список на карточке', 'info');
+      this.hud.toast('Сейчас нужно другое действие. Не уверены — нажмите «Подсказка»', 'info');
     }
   }
 
@@ -232,6 +234,8 @@ export class Trainer {
     if (!this.alive || this.finished || this.done.has(a.id)) return;
     this.running++;
     this.wrongStreak = 0;
+    this.hinted = null;
+    this.hud.revealItem(this.step.actions.indexOf(a));
     this.hud.setHint(null);
     this.refresh();
     try {
@@ -336,7 +340,10 @@ export class Trainer {
   private showHint(focus: boolean): void {
     const a = this.available()[0];
     if (!a) return;
+    this.hinted = a.id;
+    this.hud.revealItem(this.step.actions.indexOf(a));
     this.hud.setHint(a.hint);
+    if (a.target) this.highlighter.set([this.targets[a.target].obj]);
     this.hotspots.emphasize(`a:${a.id}`);
     this.highlighter.emphasize();
     if (focus && a.view) this.ctx.focus(a.view, 1.1);

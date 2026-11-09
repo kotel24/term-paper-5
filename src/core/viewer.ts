@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import gsap from 'gsap';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { canvasTexture } from '../model/kit';
-import { makeEnvironment, makeLights, now, type FrameFn, type Stage, type View } from './stage';
+import { disposeTree, makeEnvironment, makeLights, now, type FrameFn, type Stage, type View } from './stage';
 
 function floorTexture(): THREE.CanvasTexture {
   const t = canvasTexture(1024, 1024, (ctx, w, h) => {
@@ -28,7 +28,7 @@ function floorTexture(): THREE.CanvasTexture {
     }
   });
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(4, 4);
+  t.repeat.set(8, 8);
   return t;
 }
 
@@ -36,7 +36,7 @@ function zoneTexture(): THREE.CanvasTexture {
   return canvasTexture(1024, 1024, (ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
     const b = 44;
-    ctx.fillStyle = '#f2b705';
+    ctx.fillStyle = '#fad201';
     ctx.fillRect(0, 0, w, b);
     ctx.fillRect(0, h - b, w, b);
     ctx.fillRect(0, 0, b, h);
@@ -48,7 +48,7 @@ function zoneTexture(): THREE.CanvasTexture {
     ctx.rect(0, 0, b, h);
     ctx.rect(w - b, 0, b, h);
     ctx.clip();
-    ctx.fillStyle = '#171717';
+    ctx.fillStyle = '#282828';
     for (let x = -h; x < w + h; x += 90) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
@@ -79,22 +79,25 @@ export class ViewerStage implements Stage {
   private lastView: View | null = null;
   private refocus: gsap.core.Tween | null = null;
   private ro: ResizeObserver;
+  private junk: { dispose(): void }[] = [];
 
   constructor(container: HTMLElement) {
     this.dom = container;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.12;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.classList.add('stage-canvas');
 
     this.scene.background = new THREE.Color(0x1b2024);
     this.scene.fog = new THREE.Fog(0x1b2024, 6, 14);
-    this.scene.environment = makeEnvironment(this.renderer);
-    this.scene.environmentIntensity = 0.55;
+    const env = makeEnvironment(this.renderer);
+    this.scene.environment = env;
+    this.junk.push(env);
+    this.scene.environmentIntensity = 0.38;
     const lights = makeLights();
     this.scene.add(lights.group);
     this.scene.add(this.content);
@@ -105,7 +108,6 @@ export class ViewerStage implements Stage {
     );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
-    floor.material.map!.repeat.set(8, 8);
     this.scene.add(floor);
     const zone = new THREE.Mesh(
       new THREE.PlaneGeometry(2.3, 2.0),
@@ -207,6 +209,13 @@ export class ViewerStage implements Stage {
     const horizontal = aspect < 1.2 ? THREE.MathUtils.clamp(1.2 / aspect, 1, 2.1) * 0.92 : 1;
     offset.multiplyScalar(Math.max(1, horizontal * vertical));
     const endPos = target.clone().add(offset);
+    this.tween?.kill();
+    if (duration <= 0) {
+      this.tween = null;
+      this.controls.target.copy(target);
+      this.camera.position.copy(endPos);
+      return;
+    }
     const startPos = this.camera.position.clone();
     const startTarget = this.controls.target.clone();
     const startOff = startPos.clone().sub(startTarget);
@@ -216,12 +225,6 @@ export class ViewerStage implements Stage {
     let dTheta = s1.theta - s0.theta;
     if (dTheta > Math.PI) dTheta -= Math.PI * 2;
     if (dTheta < -Math.PI) dTheta += Math.PI * 2;
-    this.tween?.kill();
-    if (duration <= 0) {
-      this.controls.target.copy(target);
-      this.camera.position.copy(endPos);
-      return;
-    }
     const p = { t: 0 };
     const sph = new THREE.Spherical();
     this.tween = gsap.to(p, {
@@ -255,10 +258,14 @@ export class ViewerStage implements Stage {
   dispose(): void {
     this.tween?.kill();
     this.refocus?.kill();
+    gsap.killTweensOf(this);
     this.renderer.setAnimationLoop(null);
     this.ro.disconnect();
     this.controls.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
+    disposeTree(this.scene);
+    for (const j of this.junk) j.dispose();
+    this.junk = [];
   }
 }

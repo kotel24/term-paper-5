@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import gsap from 'gsap';
 import type { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js';
-import { makeEnvironment, makeLights, now, type FrameFn, type Lights, type Stage } from '../core/stage';
+import { disposeTree, makeEnvironment, makeLights, now, type FrameFn, type Lights, type Stage } from '../core/stage';
 
 const MODEL_SCALE = 0.42;
 const CENTER_X = 0.36;
@@ -26,6 +26,7 @@ export class ARStage implements Stage {
   private placement = new THREE.Group();
   private catcher: THREE.Mesh | null = null;
   private surface: Surface;
+  private disposed = false;
   private onResize = () => this.mind && (this.mind as unknown as { resize(): void }).resize();
 
   constructor(container: HTMLElement, private targetSrc: string, surface: Surface = 'table') {
@@ -40,6 +41,7 @@ export class ARStage implements Stage {
 
   async start(): Promise<void> {
     const { MindARThree } = await import('mind-ar/dist/mindar-image-three.prod.js');
+    if (this.disposed) return;
     const mind = new MindARThree({
       container: this.dom,
       imageTargetSrc: this.targetSrc,
@@ -87,6 +89,10 @@ export class ARStage implements Stage {
     anchor.onTargetLost = () => this.setTracked(false);
 
     await mind.start();
+    if (this.disposed) {
+      this.release();
+      return;
+    }
     window.addEventListener('resize', this.onResize);
     this.last = now();
     this.renderer.setAnimationLoop(() => this.tick());
@@ -160,14 +166,21 @@ export class ARStage implements Stage {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     window.removeEventListener('resize', this.onResize);
+    this.release();
+  }
+
+  private release(): void {
     if (this.renderer) this.renderer.setAnimationLoop(null);
     try {
       this.mind?.stop();
-    } catch {
-      this.mind = null;
-    }
+    } catch {}
     this.renderer?.dispose();
+    const env = this.scene?.environment ?? null;
+    if (this.scene) disposeTree(this.scene);
+    env?.dispose();
     this.dom.innerHTML = '';
   }
 }

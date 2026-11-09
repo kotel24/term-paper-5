@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import gsap from 'gsap';
+import { play } from '../core/anim';
 import { M } from '../model/materials';
 import { AX, AZ, TABLE_TOP, WORK_TOP } from '../model/machine';
 
@@ -134,10 +135,11 @@ export class Chips {
         },
       }, delay + duration * 0.1);
     });
-    return new Promise((res) => {
-      tl.eventCallback('onComplete', () => res());
-      if (!active.length) res();
-    });
+    if (!active.length) {
+      tl.kill();
+      return Promise.resolve();
+    }
+    return play(tl);
   }
 
   clear(): void {

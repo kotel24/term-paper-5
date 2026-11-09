@@ -1,20 +1,20 @@
 import * as THREE from 'three';
 import gsap from 'gsap';
-import { M } from '../model/materials';
 import {
   AX,
   AZ,
   CHUCK_LEN,
   DRILL_INSERT,
   FEED_CONTACT,
-  FEEDS,
-  SPEEDS,
   TABLE_TOP,
   WORK_BOTTOM_IN_VISE,
   WORK_THICK,
   WORK_TOP,
 } from '../model/machine';
-import { fly, OMEGA, play, press, shake, spin, to, turnDial } from './anim';
+import { play, to, wait } from '../core/anim';
+import { fmtNum } from '../model/kit';
+import { fly, OMEGA, press, shake, spin, turnDial } from './anim';
+import { CUT, FEED_INDEX, SPEED_INDEX } from './cutting';
 import type { Ctx, Step, Views } from './types';
 import { modesPanel, ppePanel } from '../ui/panels';
 
@@ -120,6 +120,7 @@ async function sweepChips(ctx: Ctx): Promise<void> {
   await fly(m.brush, m.root, V(AX - 0.2, y + 0.03, AZ + 0.05), E(0, 0, 0), 1.0, 0.2);
   const strokes = [AZ + 0.05, AZ - 0.02, AZ + 0.11];
   const sweeping = chips.sweep(2.6);
+  sweeping.catch(() => {});
   for (const z of strokes) {
     m.brush.position.set(AX - 0.2, y + 0.03, z);
     sfx.sweep();
@@ -169,7 +170,7 @@ export const STEPS: Step[] = [
           const open = g.rotation.y;
           await to(g.rotation, { y: 0, duration: 0.9, ease: 'power2.inOut' });
           ctx.sfx.clunk();
-          await ctx.wait(0.35);
+          await wait(0.35);
           await to(g.rotation, { y: open, duration: 0.9, ease: 'power2.inOut' });
           ctx.hud.toast('Ограждение целое, поворачивается свободно', 'ok');
         },
@@ -185,8 +186,7 @@ export const STEPS: Step[] = [
           const b = ctx.m.groundBolt;
           ctx.sfx.ratchet(4, 0.4);
           await to(b.rotation, { keyframes: [{ y: 0.3, duration: 0.2 }, { y: -0.1, duration: 0.2 }, { y: 0, duration: 0.15 }] });
-          M.wire.emissive.set(0x3dff7a);
-          await to(M.wire, { keyframes: [{ emissiveIntensity: 0.9, duration: 0.25 }, { emissiveIntensity: 0.1, duration: 0.25 }, { emissiveIntensity: 0.9, duration: 0.25 }, { emissiveIntensity: 0, duration: 0.4 }] });
+          await to(ctx.m.wireMat, { keyframes: [{ emissiveIntensity: 0.9, duration: 0.25 }, { emissiveIntensity: 0.1, duration: 0.25 }, { emissiveIntensity: 0.9, duration: 0.25 }, { emissiveIntensity: 0, duration: 0.4 }] });
           ctx.hud.toast('Провод заземления подключён, болт затянут', 'ok');
         },
       },
@@ -203,8 +203,8 @@ export const STEPS: Step[] = [
           ctx.sfx.clunk();
           ctx.state.power = true;
           ctx.focus('controls', 0.9);
-          await ctx.wait(0.7);
-          await to(M.lamp, { keyframes: [{ emissiveIntensity: 1.6, duration: 0.06 }, { emissiveIntensity: 0.2, duration: 0.06 }, { emissiveIntensity: 2.2, duration: 0.2 }] });
+          await wait(0.7);
+          await to(ctx.m.lampMat, { keyframes: [{ emissiveIntensity: 1.6, duration: 0.06 }, { emissiveIntensity: 0.2, duration: 0.06 }, { emissiveIntensity: 2.2, duration: 0.2 }] });
           ctx.sfx.click();
           ctx.hud.toast('Напряжение подано — горит лампа «Сеть»', 'ok');
         },
@@ -306,16 +306,16 @@ export const STEPS: Step[] = [
   {
     id: 'tool',
     title: 'Установка сверла',
-    intro: 'Установите сверло Ø12 мм в патрон, затяните патрон ключом и обязательно выньте ключ.',
+    intro: `Установите сверло Ø${CUT.d} мм в патрон, затяните патрон ключом и обязательно выньте ключ.`,
     view: 'chuck',
     ordered: true,
     actions: [
       {
         id: 'drill',
-        label: 'Вставить сверло Ø12 в патрон',
+        label: `Вставить сверло Ø${CUT.d} в патрон`,
         hint: 'Сверло стоит в деревянной подставке на тумбочке.',
         target: 'drill',
-        hotspot: 'Сверло Ø12',
+        hotspot: `Сверло Ø${CUT.d}`,
         view: 'cart',
         run: async (ctx) => {
           ctx.focus('chuck', 1.4);
@@ -355,9 +355,9 @@ export const STEPS: Step[] = [
         hotspot: 'Вынуть ключ',
         view: 'chuck',
         run: async (ctx) => {
+          ctx.state.keyInChuck = false;
           ctx.sfx.whoosh();
           await fly(ctx.m.key, ctx.m.keyHolder, V(0, 0, 0), E(-Math.PI / 2), 1.0, 0.1);
-          ctx.state.keyInChuck = false;
           ctx.sfx.metal();
           ctx.hud.toast('Ключ на держателе — пуск безопасен', 'ok');
         },
@@ -385,17 +385,17 @@ export const STEPS: Step[] = [
   {
     id: 'modes',
     title: 'Режимы резания',
-    intro: 'Рассчитайте частоту вращения и выберите подачу для сверления стали 45 сверлом Ø12 мм.',
+    intro: `Рассчитайте частоту вращения и выберите подачу для сверления стали 45 сверлом Ø${CUT.d} мм.`,
     view: 'dials',
     ordered: true,
     actions: [
       {
         id: 'speed',
         label: 'Выставить частоту вращения шпинделя',
-        hint: 'n = 1000·v / (π·D) = 1000·25 / (3,14·12) ≈ 663 об/мин. Нужна ближайшая меньшая ступень станка.',
+        hint: `${CUT.formula}. Нужна ближайшая меньшая ступень станка.`,
         run: async (ctx) => {
           ctx.focus('dials', 0.8);
-          const target = SPEEDS.indexOf(500);
+          const target = SPEED_INDEX;
           await turnDial(ctx, ctx.m.speedDial, ctx.state.speedIndex, target, (i) => ctx.m.speedAngle(i));
           ctx.state.speedIndex = target;
         },
@@ -403,16 +403,26 @@ export const STEPS: Step[] = [
       {
         id: 'feed',
         label: 'Выставить подачу',
-        hint: 'Рекомендуемая подача 0,18 мм/об. Выберите ближайшее меньшее значение из ряда станка.',
+        hint: `Рекомендуемая подача ${fmtNum(CUT.sRec)} мм/об. Выберите ближайшее меньшее значение из ряда станка.`,
         run: async (ctx) => {
           ctx.focus('dials', 0.8);
-          const target = FEEDS.indexOf(0.14);
+          const target = FEED_INDEX;
           await turnDial(ctx, ctx.m.feedDial, ctx.state.feedIndex, target, (i) => ctx.m.feedAngle(i));
           ctx.state.feedIndex = target;
         },
       },
     ],
     panel: modesPanel,
+    traps: [
+      {
+        id: 'switchOnRun',
+        target: 'startBtn',
+        hotspot: 'Проверить на ходу',
+        title: 'Скорости переключают только при остановке',
+        message: 'На головке станка для этого и висит табличка «Менять скорость только при остановке». Переключение на ходу выкрашивает зубья блока шестерён коробки скоростей, а рукоятку выбивает из руки.',
+        active: () => true,
+      },
+    ],
     why: [
       'Завышенная частота перегревает и тупит сверло, а завышенная подача ломает его. Обломки разлетаются.',
       'Из ряда станка выбирают ближайшую меньшую ступень, чтобы не превысить допустимую скорость резания.',

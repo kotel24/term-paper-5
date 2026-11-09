@@ -6,11 +6,23 @@
   --line-strong: rgba(255, 255, 255, 0.16);
   --text: #eef1f3;
   --muted: #9aa5ad;
-  --accent: #ffc21a;
+  /* Сигнальные цвета по ГОСТ 12.4.026-2015, приложение В (эталонные образцы RAL).
+     Смысловое значение сохранено: красный — непосредственная опасность,
+     жёлтый — возможная опасность, зелёный — безопасность и нормальный режим,
+     синий — предписание. Хроматика самого интерфейса остаётся нейтральной,
+     чтобы не конкурировать с сигнальными цветами. */
+  --sig-red: #cc0605;
+  --sig-yellow: #fad201;
+  --sig-green: #308446;
+  --sig-blue: #005387;
+  /* экранные осветлённые варианты тех же тонов — для текста и линий на тёмном фоне */
+  --accent: #fad201;
   --accent-ink: #1b1604;
-  --ok: #3ad37a;
-  --danger: #ff4d4f;
-  --info: #5cb8ff;
+  --ok: #54c178;
+  --danger: #ff6b60;
+  --info: #58a8e8;
+  --action: #e9edf0;
+  --action-ink: #11161a;
   --radius: 18px;
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -103,9 +115,9 @@ body.ar #stage video {
 }
 
 .btn.primary {
-  background: var(--accent);
-  color: var(--accent-ink);
-  box-shadow: 0 8px 24px -8px rgba(255, 194, 26, 0.6);
+  background: var(--action);
+  color: var(--action-ink);
+  box-shadow: 0 8px 24px -10px rgba(233, 237, 240, 0.55);
 }
 
 .btn.ghost {
@@ -183,7 +195,7 @@ body.ar #stage video {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text);
   background: rgba(255, 194, 26, 0.1);
   border: 1px solid rgba(255, 194, 26, 0.3);
   padding: 6px 12px;
@@ -199,7 +211,7 @@ body.ar #stage video {
 }
 
 .st-title span {
-  color: var(--accent);
+  color: var(--action);
 }
 
 .st-sub {
@@ -240,7 +252,7 @@ body.ar #stage video {
   font-size: 11px;
   font-weight: 700;
   background: rgba(255, 194, 26, 0.18);
-  color: var(--accent);
+  color: var(--muted);
 }
 
 .st-actions {
@@ -256,7 +268,7 @@ body.ar #stage video {
 }
 
 .st-note a {
-  color: var(--accent);
+  color: var(--info);
 }
 
 @media (max-width: 420px) {
@@ -325,7 +337,7 @@ body.ar #stage video {
 }
 
 .tb-text span {
-  color: var(--accent);
+  color: var(--muted);
   font-weight: 700;
 }
 
@@ -352,7 +364,7 @@ body.ar #stage video {
 .progress b {
   display: block;
   height: 100%;
-  background: var(--accent);
+  background: var(--ok);
   transform-origin: left;
   transform: scaleX(0);
   transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.4s;
@@ -397,7 +409,7 @@ body.ar #stage video {
 }
 
 .stat.hint i {
-  color: var(--accent);
+  color: var(--info);
 }
 
 @media (max-width: 560px) {
@@ -454,8 +466,8 @@ body.ar #stage video {
   width: 30px;
   height: 30px;
   border-radius: 10px;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--info);
+  color: var(--action-ink);
   font-weight: 800;
   display: grid;
   place-items: center;
@@ -516,7 +528,7 @@ body.ar #stage video {
 
 .card-actions .btn.ghost i {
   display: inline-flex;
-  color: var(--accent);
+  color: var(--info);
 }
 
 .checklist {
@@ -564,7 +576,7 @@ body.ar #stage video {
 }
 
 .checklist li[data-state='active'] .ck {
-  border-color: var(--accent);
+  border-color: var(--info);
   box-shadow: 0 0 0 4px rgba(255, 194, 26, 0.15);
   animation: ck-pulse 1.6s ease-in-out infinite;
 }
@@ -608,7 +620,7 @@ body.ar #stage video {
 }
 
 .hint-box svg {
-  color: var(--accent);
+  color: var(--info);
   margin-top: 1px;
 }
 
@@ -882,7 +894,7 @@ body.ar #stage video {
   display: grid;
   place-items: center;
   pointer-events: auto;
-  background: radial-gradient(circle, var(--accent) 0 9px, rgba(255, 194, 26, 0.25) 10px 15px, transparent 16px);
+  background: radial-gradient(circle, var(--accent) 0 9px, rgba(250, 210, 1, 0.25) 10px 15px, transparent 16px);
   transform: scale(0);
   transition: transform 0.45s cubic-bezier(0.2, 1.6, 0.4, 1);
 }
@@ -919,7 +931,7 @@ body.ar #stage video {
   padding: 6px 11px;
   border-radius: 10px;
   background: rgba(18, 22, 26, 0.9);
-  border: 1px solid rgba(255, 194, 26, 0.45);
+  border: 1px solid rgba(250, 210, 1, 0.45);
   font-size: 13px;
   font-weight: 600;
   pointer-events: auto;
@@ -957,6 +969,61 @@ body.ar #stage video {
 .hotspot.emph .hs-label {
   background: var(--accent);
   color: var(--accent-ink);
+}
+
+/* Выносная линия от точки привязки к подписи. По ГОСТ 2.316 выноска —
+   короткая прямая, не пересекающая другие выноски и не наезжающая на объект;
+   подписи расталкиваются только вниз, поэтому линии не пересекаются. */
+.hotspot .hs-lead {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 0;
+  width: var(--lead-len, 0px);
+  border-top: 1.5px solid rgba(250, 210, 1, 0.75);
+  transform-origin: 0 0;
+  transform: rotate(var(--lead-ang, 0rad));
+  opacity: 0;
+  transition: opacity 0.3s 0.12s, width 0.25s;
+  pointer-events: none;
+}
+
+.hotspot.in .hs-lead {
+  opacity: 1;
+}
+
+/* Перекрытые геометрией выноски уходят на второй план: по данным
+   исследований перекрытие — основной признак глубины в AR. */
+.hotspot.occluded .hs-label {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.hotspot.occluded .hs-lead {
+  border-top-style: dashed;
+  opacity: 0.5;
+}
+
+.hotspot.in.occluded .hs-dot {
+  transform: scale(0.72);
+}
+
+.hotspot.edge .hs-lead,
+.hotspot.compact .hs-lead {
+  opacity: 0;
+}
+
+.hotspot.occluded .hs-ring {
+  animation: none;
+  opacity: 0;
+}
+
+/* Дальние перекрытые метки сворачиваются в точку, чтобы на экране
+   одновременно читалось не более трёх подписей. */
+.hotspot.compact .hs-label {
+  opacity: 0;
+  pointer-events: none;
+  transition-delay: 0s;
 }
 
 .hotspot .hs-arrow {
@@ -1063,7 +1130,7 @@ body.ar #stage video {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--ok);
   transform: rotate(var(--a)) translateY(0);
   animation: br-spark 0.75s cubic-bezier(0.1, 0.7, 0.3, 1) forwards;
 }
@@ -1181,7 +1248,7 @@ body.ar #stage video {
 
 .pl-fg {
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--ok);
   stroke-width: 4;
   stroke-linecap: round;
 }
@@ -1204,7 +1271,7 @@ body.ar #stage video {
 }
 
 .gg-row b {
-  color: var(--accent);
+  color: var(--ok);
 }
 
 .gg-row.sub {
@@ -1223,7 +1290,7 @@ body.ar #stage video {
 .gg-bar i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), #ff8a1a);
+  background: linear-gradient(90deg, var(--ok), #2f8f52);
   border-radius: 6px;
   transition: width 0.12s linear;
 }
@@ -1249,7 +1316,7 @@ body.ar #stage video {
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--info);
 }
 
 .bn-title {
@@ -1266,7 +1333,7 @@ body.ar #stage video {
   width: 120px;
   height: 3px;
   border-radius: 3px;
-  background: var(--accent);
+  background: var(--info);
   margin-top: 16px;
   transform-origin: center;
 }
@@ -1396,7 +1463,7 @@ body.ar #stage video {
 .menu-item i,
 .menu-item > svg {
   display: inline-flex;
-  color: var(--accent);
+  color: var(--text);
 }
 
 .finish {
@@ -1414,20 +1481,101 @@ body.ar #stage video {
   text-align: center;
 }
 
-.fin-medal {
-  width: 88px;
-  height: 88px;
-  margin: 0 auto;
-  border-radius: 50%;
+/* Полоса заключения. Цвет — по ГОСТ 12.4.026-2015: зелёный — безопасность
+   и нормальный режим, жёлтый — возможная опасность, красный — опасность. */
+.fin-verdict {
   display: grid;
-  place-items: center;
-  background: radial-gradient(circle, rgba(255, 194, 26, 0.3), rgba(255, 194, 26, 0.05));
-  color: var(--accent);
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  text-align: left;
+  border-left: 6px solid var(--sig-green);
+  background: rgba(48, 132, 70, 0.14);
 }
 
-.fin-medal svg {
-  width: 60px;
-  height: 60px;
+.fin-verdict b {
+  font-size: 17px;
+}
+
+.fin-verdict span {
+  font-size: 13px;
+  color: #c3ccd2;
+}
+
+.fin-verdict.warn {
+  border-left-color: var(--sig-yellow);
+  background: rgba(250, 210, 1, 0.12);
+}
+
+.fin-verdict.bad {
+  border-left-color: var(--sig-red);
+  background: rgba(204, 6, 5, 0.16);
+}
+
+.fin-h {
+  margin: 18px 0 8px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fin-log {
+  list-style: none;
+  counter-reset: fl;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+}
+
+.fin-log li {
+  counter-increment: fl;
+  padding: 11px 13px 11px 14px;
+  border-radius: 12px;
+  background: rgba(204, 6, 5, 0.09);
+  border-left: 3px solid var(--sig-red);
+}
+
+.fin-log .fl-step {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+.fin-log b {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.fin-log b::before {
+  content: counter(fl) '. ';
+  color: var(--danger);
+}
+
+.fin-log p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #c3ccd2;
+}
+
+.fin-clean {
+  margin: 18px 0 0;
+  padding: 14px;
+  border-radius: 12px;
+  text-align: left;
+  font-size: 13px;
+  color: #c3ccd2;
+  background: rgba(48, 132, 70, 0.12);
+  border-left: 3px solid var(--sig-green);
 }
 
 .fin-box h1 {
@@ -1478,7 +1626,7 @@ body.ar #stage video {
   list-style: none;
   counter-reset: fs;
   padding: 0;
-  margin: 0 0 16px;
+  margin: 0;
   text-align: left;
   display: grid;
   gap: 4px;
@@ -1525,6 +1673,7 @@ body.ar #stage video {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+  margin-top: 20px;
 }
 
 .fin-actions .btn {
@@ -1549,7 +1698,7 @@ body.ar #stage video {
   height: 46px;
   border-radius: 50%;
   border: 4px solid rgba(255, 255, 255, 0.12);
-  border-top-color: var(--accent);
+  border-top-color: var(--action);
   animation: spin 0.9s linear infinite;
   margin-bottom: 10px;
 }
@@ -1592,7 +1741,7 @@ body.ar #stage video {
   position: absolute;
   width: 34px;
   height: 34px;
-  border: 4px solid var(--accent);
+  border: 4px solid var(--action);
 }
 
 .scan-frame i:nth-child(1) {
@@ -1632,7 +1781,7 @@ body.ar #stage video {
   left: 8%;
   right: 8%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  background: linear-gradient(90deg, transparent, var(--action), transparent);
   box-shadow: 0 0 16px 2px rgba(255, 194, 26, 0.6);
   animation: scan 2.4s ease-in-out infinite;
 }

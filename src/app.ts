@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import gsap from 'gsap';
 import { Machine } from './model/machine';
 import { ViewerStage } from './core/viewer';
-import type { Stage } from './core/stage';
+import { disposeTree, visibleInTree, type Stage, type View } from './core/stage';
 import { Chips } from './fx/chips';
 import { Highlighter } from './fx/highlight';
 import { Hud } from './ui/hud';
@@ -11,6 +11,7 @@ import { ICON } from './ui/icons';
 import { sfx } from './audio/sfx';
 import { STEPS, VIEWS } from './scenario/steps';
 import { Trainer } from './scenario/trainer';
+import { abortAnims } from './core/anim';
 import type { Ctx, MachineState, Target } from './scenario/types';
 import type { ARStage, Surface } from './ar/arStage';
 
@@ -58,6 +59,9 @@ export class App {
   private idleSpin: gsap.core.Tween | null = null;
   private frameHook: ((dt: number, t: number) => void) | null = null;
   private surface: Surface = 'table';
+  private run = 0;
+  private finishTimer = 0;
+  private pickBound = new WeakSet<HTMLCanvasElement>();
 
   constructor() {
     this.hud.show(false);
@@ -80,18 +84,18 @@ export class App {
     });
     $('mSound').addEventListener('click', () => this.toggleSound());
     $('mRestart').addEventListener('click', () => {
-      this.closeMenu();
-      void this.restart();
+      this.hideMenu();
+      this.restart();
     });
     $('mHome').addEventListener('click', () => {
-      this.closeMenu();
-      void this.home();
+      this.hideMenu();
+      this.home();
     });
     $('mView').addEventListener('click', () => {
       this.closeMenu();
       this.s?.ctx?.focus('overview', 1.4);
     });
-    $('scanBack').addEventListener('click', () => void this.home());
+    $('scanBack').addEventListener('click', () => this.home());
     $('scanSurface').addEventListener('click', () => this.toggleSurface());
     $('mSurface').addEventListener('click', () => this.toggleSurface());
     this.loadSound();
@@ -128,8 +132,9 @@ export class App {
 
   private makeSession(stage: Stage): Session {
     const machine = new Machine();
-    machine.speedDial.rotation.z = machine.speedAngle(3);
-    machine.feedDial.rotation.z = machine.feedAngle(5);
+    const init = initialState();
+    machine.speedDial.rotation.z = machine.speedAngle(init.speedIndex);
+    machine.feedDial.rotation.z = machine.feedAngle(init.feedIndex);
     const chips = new Chips();
     machine.root.add(chips.group);
     stage.content.add(machine.root);
@@ -149,13 +154,17 @@ export class App {
     };
   }
 
-  private bootPreview(): void {
+  private boot3d(): ViewerStage {
     const stage = new ViewerStage(this.stageHost);
     this.s = this.makeSession(stage);
     stage.onFrame((dt, t) => this.frameHook?.(dt, t));
     stage.focus(VIEWS.overview, 0);
-    this.startIdleOrbit(stage);
     void stage.start();
+    return stage;
+  }
+
+  private bootPreview(): void {
+    this.startIdleOrbit(this.boot3d());
     document.body.classList.add('on-start');
     this.applySideInset();
   }
@@ -165,6 +174,7 @@ export class App {
     const p = { a: 0 };
     const r = 4;
     const target = new THREE.Vector3(0.3, 1.0, 0.2);
+    const view: View = { pos: [0, 2.05, 0], target: [target.x, target.y, target.z] };
     this.idleSpin = gsap.to(p, {
       a: Math.PI * 2,
       duration: 60,
@@ -172,7 +182,9 @@ export class App {
       ease: 'none',
       onUpdate: () => {
         const a = p.a + 0.6;
-        stage.focus({ pos: [target.x + Math.sin(a) * r, 2.05, target.z + Math.cos(a) * r], target: [target.x, target.y, target.z] }, 0);
+        view.pos[0] = target.x + Math.sin(a) * r;
+        view.pos[2] = target.z + Math.cos(a) * r;
+        stage.focus(view, 0);
       },
     });
   }
@@ -189,7 +201,6 @@ export class App {
         const v = VIEWS[view];
         if (v) s.stage.focus(v, dur);
       },
-      wait: (sec) => new Promise((r) => gsap.delayedCall(sec, r)),
       isDone: () => false,
     };
   }
@@ -202,16 +213,21 @@ export class App {
     s.trainer = trainer;
     trainer.onFinish = () => {
       sfx.stopLoops();
-      setTimeout(() => this.hud.finish(trainer.result(), () => void this.restart(), () => void this.home()), 900);
+      clearTimeout(this.finishTimer);
+      this.finishTimer = window.setTimeout(() => {
+        this.hud.finish(trainer.result(), () => this.restart(), () => this.home());
+      }, 900);
     };
-    this.bindPicking(s);
+    this.bindPicking(s.stage);
     this.hud.show(true);
     this.applySideInset();
     void trainer.start(from);
   }
 
-  private bindPicking(s: Session): void {
-    const canvas = s.stage.renderer.domElement;
+  private bindPicking(stage: Stage): void {
+    const canvas = stage.renderer.domElement;
+    if (this.pickBound.has(canvas)) return;
+    this.pickBound.add(canvas);
     const ray = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
     let downX = 0;
@@ -223,17 +239,16 @@ export class App {
       downT = performance.now();
     });
     canvas.addEventListener('pointerup', (e) => {
-      if (this.s !== s || !s.trainer) return;
+      const s = this.s;
+      if (!s || s.stage !== stage || !s.trainer) return;
       if (Math.hypot(e.clientX - downX, e.clientY - downY) > 8 || performance.now() - downT > 450) return;
-      if (!s.stage.isVisible()) return;
+      if (!stage.isVisible()) return;
       const rect = canvas.getBoundingClientRect();
       ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-      ray.setFromCamera(ndc, s.stage.camera);
-      const hits = ray.intersectObject(s.machine.root, true).filter((h) => (h.object as THREE.Mesh).isMesh && h.object.visible);
+      ray.setFromCamera(ndc, stage.camera);
+      const hits = ray.intersectObject(s.machine.root, true).filter((h) => (h.object as THREE.Mesh).isMesh && visibleInTree(h.object));
       if (!hits.length) return;
-      const name = s.trainer.targetOf(hits[0].object);
-      if (name) s.trainer.objectTapped(name);
-      else s.trainer.objectTapped('');
+      s.trainer.objectTapped(s.trainer.targetOf(hits[0].object) ?? '');
     });
   }
 
@@ -263,113 +278,115 @@ export class App {
 
   private fastForwardStep(): number {
     const n = Number(new URLSearchParams(location.search).get('step'));
-    return Number.isFinite(n) && n >= 1 && n <= STEPS.length ? n - 1 : 0;
+    return Number.isInteger(n) && n >= 1 && n <= STEPS.length ? n - 1 : 0;
   }
 
   private async begin3d(): Promise<void> {
+    if (this.mode) return;
     this.mode = '3d';
+    const run = ++this.run;
     this.idleSpin?.kill();
     this.idleSpin = null;
     await this.hideStart();
+    if (run !== this.run) return;
     this.startTrainer(this.fastForwardStep());
   }
 
   private async beginAr(): Promise<void> {
+    if (this.mode) return;
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       this.hud.toast('Камера доступна только по HTTPS. Откройте тренажёр по защищённой ссылке.', 'warn');
       return;
     }
     this.mode = 'ar';
+    const run = ++this.run;
     this.idleSpin?.kill();
     this.idleSpin = null;
     await this.hideStart();
+    if (run !== this.run) return;
     const loading = $('loading');
     loading.classList.remove('hidden');
     gsap.fromTo(loading, { opacity: 0 }, { opacity: 1, duration: 0.3 });
     this.teardown();
     const { ARStage } = await import('./ar/arStage');
+    if (run !== this.run) return;
     const stage = new ARStage(this.stageHost, './targets/marker.mind', this.surface);
     const s = this.makeSession(stage);
     this.s = s;
     stage.onFrame((dt, t) => this.frameHook?.(dt, t));
     const scan = $('scan');
-    let started = false;
     stage.onTracking((v) => {
+      if (this.s?.stage !== stage) return;
       scan.classList.toggle('hidden', v);
       document.body.classList.toggle('tracking', v);
-      if (v && !started) {
-        started = true;
-        this.startTrainer(0);
-      }
+      if (v && !this.s.trainer) this.startTrainer(0);
     });
     try {
       await stage.start();
+      if (run !== this.run) return;
       gsap.to(loading, { opacity: 0, duration: 0.3, onComplete: () => loading.classList.add('hidden') });
       scan.classList.remove('hidden');
       gsap.fromTo(scan, { opacity: 0 }, { opacity: 1, duration: 0.4 });
       document.body.classList.add('ar');
     } catch (err) {
+      if (run !== this.run) return;
       console.error(err);
+      gsap.killTweensOf(loading);
       loading.classList.add('hidden');
       this.teardown();
       this.hud.toast('Не удалось запустить камеру. Открываем 3D-режим.', 'warn');
-      this.s = null;
-      const viewer = new ViewerStage(this.stageHost);
-      this.s = this.makeSession(viewer);
-      viewer.onFrame((dt, t) => this.frameHook?.(dt, t));
-      viewer.focus(VIEWS.overview, 0);
-      void viewer.start();
       this.mode = '3d';
+      this.boot3d();
       this.startTrainer(0);
     }
+  }
+
+  private stopSession(s: Session): void {
+    clearTimeout(this.finishTimer);
+    s.trainer?.stop();
+    s.trainer = null;
+    s.hotspots.clear();
+    s.highlighter.clear();
+    s.chips.clear();
+    sfx.stopLoops();
+    abortAnims();
+    gsap.globalTimeline.timeScale(1);
+    this.hud.reset();
   }
 
   private teardown(): void {
     const s = this.s;
     if (!s) return;
-    s.trainer?.stop();
-    s.hotspots.clear();
-    s.highlighter.clear();
-    s.chips.clear();
+    this.stopSession(s);
     s.stage.dispose();
     this.s = null;
-    sfx.stopLoops();
-    gsap.globalTimeline.getChildren(true, true, false).forEach((t) => t.kill());
-    gsap.globalTimeline.timeScale(1);
     this.hud.show(false);
-    this.hud.hideFinish();
-    $('panelSlot').innerHTML = '';
     document.body.classList.remove('ar', 'tracking');
     $('scan').classList.add('hidden');
-    $('alert').classList.add('hidden');
-    $('banner').classList.add('hidden');
-    $('pill').classList.add('hidden');
-    $('gauge').classList.add('hidden');
   }
 
-  private async restart(): Promise<void> {
-    const mode = this.mode;
-    if (mode === 'ar') {
-      const s = this.s!;
-      s.trainer?.stop();
+  private restart(): void {
+    const s = this.s;
+    if (!s || !this.mode) return;
+    this.run++;
+    if (this.mode === 'ar') {
+      this.stopSession(s);
       s.stage.content.remove(s.machine.root);
-      const fresh = this.makeSession(s.stage);
-      this.s = fresh;
-      sfx.stopLoops();
-      this.hud.hideFinish();
-      this.startTrainer(0);
+      disposeTree(s.machine.root);
+      this.s = this.makeSession(s.stage);
+      if (s.stage.isVisible()) this.startTrainer(0);
+      else this.hud.show(false);
       return;
     }
     this.teardown();
-    const stage = new ViewerStage(this.stageHost);
-    this.s = this.makeSession(stage);
-    stage.onFrame((dt, t) => this.frameHook?.(dt, t));
-    stage.focus(VIEWS.overview, 0);
-    void stage.start();
+    this.boot3d();
     this.startTrainer(0);
   }
 
-  private async home(): Promise<void> {
+  private home(): void {
+    this.run++;
+    gsap.killTweensOf([$('start'), $('loading'), $('scan')]);
+    $('loading').classList.add('hidden');
     this.teardown();
     this.mode = null;
     this.bootPreview();
@@ -378,10 +395,18 @@ export class App {
 
   private openMenu(): void {
     const el = $('menu');
+    gsap.killTweensOf(el);
     el.classList.remove('hidden');
     gsap.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.2 });
     gsap.fromTo(el.querySelector('.menu-box'), { y: 30, scale: 0.97 }, { y: 0, scale: 1, duration: 0.4, ease: 'back.out(1.6)' });
     $('mView').classList.toggle('hidden', this.mode !== '3d');
+  }
+
+  private hideMenu(): void {
+    const el = $('menu');
+    gsap.killTweensOf([el, el.querySelector('.menu-box')]);
+    gsap.set(el, { opacity: 0 });
+    el.classList.add('hidden');
   }
 
   private closeMenu(): void {

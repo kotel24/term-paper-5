@@ -23,7 +23,6 @@ export interface Ctx {
   hud: Hud;
   state: MachineState;
   focus(view: string, duration?: number): void;
-  wait(seconds: number): Promise<void>;
   isDone(actionId: string): boolean;
 }
 

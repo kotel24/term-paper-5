@@ -1,6 +1,21 @@
 import * as THREE from 'three';
 import { canvasTexture } from './kit';
 
+export const GOST = {
+  red: 0xcc0605,
+  yellow: 0xfad201,
+  green: 0x308446,
+  blue: 0x005387,
+  white: 0xf4f4f4,
+  black: 0x282828,
+} as const;
+
+export const ENAMEL = {
+  body: 0x587246,
+  dark: 0x44593a,
+  base: 0x36472f,
+} as const;
+
 function noiseTexture(base: string, spread: number, size = 256): THREE.CanvasTexture {
   const t = canvasTexture(size, size, (ctx, w, h) => {
     ctx.fillStyle = base;
@@ -62,9 +77,9 @@ function stripeTexture(a: string, b: string, n: number): THREE.CanvasTexture {
 
 function hazardTexture(): THREE.CanvasTexture {
   const t = canvasTexture(256, 64, (ctx, w, h) => {
-    ctx.fillStyle = '#f2b705';
+    ctx.fillStyle = '#fad201';
     ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#161616';
+    ctx.fillStyle = '#282828';
     for (let x = -h; x < w + h; x += 48) {
       ctx.beginPath();
       ctx.moveTo(x, h);
@@ -78,14 +93,17 @@ function hazardTexture(): THREE.CanvasTexture {
   return t;
 }
 
-const paintRough = noiseTexture('#c8c8c8', 40);
+const paintRough = noiseTexture('#b4b4b4', 34);
+const castRough = noiseTexture('#dcdcdc', 70, 128);
+castRough.colorSpace = THREE.NoColorSpace;
+castRough.repeat.set(3, 3);
 paintRough.colorSpace = THREE.NoColorSpace;
 const brushed = brushedTexture();
 
 export const M = {
-  paint: new THREE.MeshStandardMaterial({ color: 0x86a596, roughness: 0.62, metalness: 0.12, roughnessMap: paintRough }),
-  paintDark: new THREE.MeshStandardMaterial({ color: 0x5c7a6c, roughness: 0.66, metalness: 0.12, roughnessMap: paintRough }),
-  paintBase: new THREE.MeshStandardMaterial({ color: 0x4f6a5e, roughness: 0.72, metalness: 0.1, roughnessMap: paintRough }),
+  paint: new THREE.MeshStandardMaterial({ color: ENAMEL.body, roughness: 0.58, metalness: 0.06, roughnessMap: paintRough }),
+  paintDark: new THREE.MeshStandardMaterial({ color: ENAMEL.dark, roughness: 0.64, metalness: 0.06, roughnessMap: paintRough }),
+  paintBase: new THREE.MeshStandardMaterial({ color: ENAMEL.base, roughness: 0.86, metalness: 0.04, roughnessMap: castRough }),
   machined: new THREE.MeshStandardMaterial({ color: 0xd4d9de, roughness: 0.32, metalness: 1, roughnessMap: brushed }),
   steel: new THREE.MeshStandardMaterial({ color: 0xc7ccd1, roughness: 0.24, metalness: 1 }),
   steelDark: new THREE.MeshStandardMaterial({ color: 0x7d848b, roughness: 0.38, metalness: 1 }),
@@ -94,10 +112,10 @@ export const M = {
   bakelite: new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.22, metalness: 0.05 }),
   rubber: new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.92, metalness: 0 }),
   slot: new THREE.MeshStandardMaterial({ color: 0x1b1d1f, roughness: 0.8, metalness: 0.3 }),
-  green: new THREE.MeshStandardMaterial({ color: 0x1f9d4a, roughness: 0.35, metalness: 0.05, emissive: 0x0b3d1c, emissiveIntensity: 0.4 }),
-  red: new THREE.MeshStandardMaterial({ color: 0xd3261f, roughness: 0.3, metalness: 0.05, emissive: 0x3d0806, emissiveIntensity: 0.4 }),
+  green: new THREE.MeshStandardMaterial({ color: GOST.green, roughness: 0.35, metalness: 0.05, emissive: 0x0b3d1c, emissiveIntensity: 0.4 }),
+  red: new THREE.MeshStandardMaterial({ color: GOST.red, roughness: 0.3, metalness: 0.05, emissive: 0x3d0806, emissiveIntensity: 0.4 }),
   lamp: new THREE.MeshStandardMaterial({ color: 0xfff3c4, roughness: 0.2, metalness: 0, emissive: 0xffd76a, emissiveIntensity: 0 }),
-  yellow: new THREE.MeshStandardMaterial({ color: 0xf2b705, roughness: 0.5, metalness: 0.1 }),
+  yellow: new THREE.MeshStandardMaterial({ color: GOST.yellow, roughness: 0.5, metalness: 0.08 }),
   hazard: new THREE.MeshStandardMaterial({ map: hazardTexture(), roughness: 0.55, metalness: 0.05 }),
   guard: new THREE.MeshStandardMaterial({ color: 0xcfe7ff, roughness: 0.06, metalness: 0, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide }),
   cart: new THREE.MeshStandardMaterial({ color: 0x33536f, roughness: 0.5, metalness: 0.25, roughnessMap: paintRough }),
@@ -116,5 +134,17 @@ export const M = {
   ],
 };
 
+M.wire.map!.repeat.set(6, 1);
+
 export const DRILL_MAT = new THREE.MeshStandardMaterial({ color: 0x3a3d40, roughness: 0.28, metalness: 0.95 });
 export const DRILL_TIP_MAT = new THREE.MeshStandardMaterial({ color: 0xd6a85a, roughness: 0.25, metalness: 1 });
+
+const shared = new WeakSet<object>();
+for (const mat of [...Object.values(M).flat(), DRILL_MAT, DRILL_TIP_MAT]) {
+  shared.add(mat);
+  for (const v of Object.values(mat)) if (v instanceof THREE.Texture) shared.add(v);
+}
+
+export function isShared(resource: object): boolean {
+  return shared.has(resource);
+}

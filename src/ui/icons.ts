@@ -19,10 +19,6 @@ export const ICON = {
   home: svg('<path d="M3.5 11L12 4l8.5 7"/><path d="M6 9.5V20h12V9.5"/>'),
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
   chevron: svg('<path d="M6 9l6 6 6-6"/>'),
-  medal: svg(
-    '<path d="M22 6l6 13M42 6l-6 13" stroke-width="3"/><circle cx="32" cy="38" r="17" stroke-width="3"/><circle cx="32" cy="38" r="11" stroke-width="2"/><path d="M26.5 38.5l4 4 7.5-8" stroke-width="3"/>',
-    '0 0 64 64',
-  ),
   goggles: svg(
     '<path d="M6 26c0-6 5-9 11-9h30c6 0 11 3 11 9v3c0 6-4 10-10 10h-6c-4 0-6-3-7-6h-6c-1 3-3 6-7 6h-6C10 39 6 35 6 29z"/><path d="M6 25H2M58 25h4"/><path d="M14 24c3-2 7-2 10 0M40 24c3-2 7-2 10 0" stroke-width="1.6"/>',
     '0 0 64 64',

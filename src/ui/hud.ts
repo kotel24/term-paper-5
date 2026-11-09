@@ -1,5 +1,8 @@
 import gsap from 'gsap';
 import { ICON } from './icons';
+import { play } from '../core/anim';
+import { fmtNum } from '../model/kit';
+import { CUT } from '../scenario/cutting';
 
 export type ItemState = 'todo' | 'active' | 'done';
 export type ToastKind = 'ok' | 'warn' | 'info';
@@ -21,6 +24,7 @@ export interface FinishData {
   errors: number;
   hints: number;
   steps: { title: string; errors: number; hints: number }[];
+  log: { step: string; title: string; message: string }[];
 }
 
 export class Hud {
@@ -39,6 +43,9 @@ export class Hud {
   private resizeListeners: ((h: number) => void)[] = [];
   private lastInset = -1;
   private insetTimer = 0;
+  private bannerTl: gsap.core.Timeline | null = null;
+  private dangerClose: (() => void) | null = null;
+  private gaugeOut: gsap.core.Tween | null = null;
 
   onHint: () => void = () => {};
   onMenu: () => void = () => {};
@@ -101,7 +108,6 @@ export class Hud {
 
   setStep(index: number, total: number, title: string, text: string): void {
     $('tbStep').textContent = `Шаг ${index + 1} из ${total}`;
-    $('tbName').textContent = title;
     $('cardNum').textContent = String(index + 1);
     $('cardTitle').textContent = title;
     $('cardText').textContent = text;
@@ -184,16 +190,24 @@ export class Hud {
     const el = $('banner');
     el.innerHTML = `<div class="bn-num">Шаг ${index + 1}</div><div class="bn-title">${esc(title)}</div><div class="bn-line"></div>`;
     el.classList.remove('hidden');
+    this.bannerTl?.kill();
     const tl = gsap.timeline();
+    this.bannerTl = tl;
     tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.25 });
     tl.fromTo(el.querySelector('.bn-num'), { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: 'power3.out' }, 0.05);
     tl.fromTo(el.querySelector('.bn-title'), { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, 0.15);
     tl.fromTo(el.querySelector('.bn-line'), { scaleX: 0 }, { scaleX: 1, duration: 0.7, ease: 'power2.inOut' }, 0.2);
     tl.to(el, { opacity: 0, duration: 0.35 }, 1.5);
-    return new Promise((r) => tl.eventCallback('onComplete', () => {
-      el.classList.add('hidden');
-      r();
-    }));
+    return new Promise((r) => {
+      const finish = () => {
+        if (this.bannerTl !== tl) return r();
+        this.bannerTl = null;
+        el.classList.add('hidden');
+        r();
+      };
+      tl.eventCallback('onComplete', finish);
+      tl.eventCallback('onInterrupt', finish);
+    });
   }
 
   burst(x: number, y: number): void {
@@ -210,6 +224,7 @@ export class Hud {
     const el = $('alert');
     $('alertTitle').textContent = title;
     $('alertText').textContent = message;
+    gsap.killTweensOf(el);
     el.classList.remove('hidden');
     const box = el.querySelector('.alert-box')!;
     gsap.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.2 });
@@ -219,62 +234,104 @@ export class Hud {
       const btn = $('alertOk');
       const close = () => {
         btn.removeEventListener('click', close);
+        this.dangerClose = null;
         gsap.to(el, { opacity: 0, duration: 0.2, onComplete: () => el.classList.add('hidden') });
         resolve();
       };
+      this.dangerClose = close;
       btn.addEventListener('click', close);
     });
   }
 
+  dismissDanger(): void {
+    this.dangerClose?.();
+  }
+
   progress(label: string, seconds: number): Promise<void> {
     const el = $('pill');
+    gsap.killTweensOf(el);
     el.innerHTML = `<svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" class="pl-bg"/><circle cx="18" cy="18" r="15" class="pl-fg"/></svg><span>${esc(label)}</span>`;
     el.classList.remove('hidden');
     const fg = el.querySelector('.pl-fg') as SVGCircleElement;
     const len = 2 * Math.PI * 15;
     fg.style.strokeDasharray = `${len}`;
     gsap.fromTo(el, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3 });
-    return new Promise((resolve) => {
-      gsap.fromTo(fg, { strokeDashoffset: len }, {
-        strokeDashoffset: 0,
-        duration: seconds,
-        ease: 'none',
-        onComplete: () => {
-          gsap.to(el, { opacity: 0, duration: 0.25, onComplete: () => el.classList.add('hidden') });
-          resolve();
-        },
-      });
-    });
+    const run = gsap.fromTo(fg, { strokeDashoffset: len }, { strokeDashoffset: 0, duration: seconds, ease: 'none' });
+    return play(run).then(
+      () => {
+        gsap.to(el, { opacity: 0, duration: 0.25, onComplete: () => el.classList.add('hidden') });
+      },
+      (err: unknown) => {
+        gsap.killTweensOf(el);
+        el.classList.add('hidden');
+        throw err;
+      },
+    );
   }
 
   gauge(show: boolean, depthMm: number): void {
     const el = $('gauge');
     if (!show) {
-      gsap.to(el, { opacity: 0, duration: 0.4, delay: 0.6, onComplete: () => el.classList.add('hidden') });
+      this.gaugeOut?.kill();
+      this.gaugeOut = gsap.to(el, {
+        opacity: 0,
+        duration: 0.4,
+        delay: 0.6,
+        onComplete: () => {
+          this.gaugeOut = null;
+          el.classList.add('hidden');
+        },
+      });
       return;
     }
     if (el.classList.contains('hidden')) {
+      el.innerHTML = `<div class="gg-row"><span>Глубина</span><b></b></div><div class="gg-bar"><i></i></div><div class="gg-row sub"><span>n = ${CUT.speed} об/мин</span><span>s = ${fmtNum(CUT.feed)} мм/об</span></div>`;
       el.classList.remove('hidden');
       gsap.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.3 });
     }
-    const pct = Math.min(100, (depthMm / 25) * 100);
-    el.innerHTML = `<div class="gg-row"><span>Глубина</span><b>${depthMm.toFixed(1).replace('.', ',')} / 25 мм</b></div><div class="gg-bar"><i style="width:${pct}%"></i></div><div class="gg-row sub"><span>n = 500 об/мин</span><span>s = 0,14 мм/об</span></div>`;
+    if (this.gaugeOut) {
+      this.gaugeOut.kill();
+      this.gaugeOut = null;
+      gsap.set(el, { opacity: 1 });
+    }
+    const pct = Math.min(100, (depthMm / CUT.depthMm) * 100);
+    el.querySelector('b')!.textContent = `${depthMm.toFixed(1).replace('.', ',')} / ${CUT.depthMm} мм`;
+    el.querySelector<HTMLElement>('.gg-bar i')!.style.width = `${pct}%`;
   }
 
   finish(data: FinishData, onRestart: () => void, onHome: () => void): void {
     const el = $('finish');
-    const grade = data.errors === 0 ? 'Отлично! Без единой ошибки.' : data.errors <= 2 ? 'Хороший результат. Повторите шаги с ошибками.' : 'Пройдите обучение ещё раз, чтобы закрепить правила.';
+    const verdict =
+      data.errors === 0
+        ? { cls: 'ok', word: 'Допущен к работе', note: 'Порядок подготовки и сверления выполнен без нарушений.' }
+        : data.errors <= 2
+          ? { cls: 'warn', word: 'Допущен с замечаниями', note: 'Разберите нарушения ниже и повторите соответствующие шаги.' }
+          : { cls: 'bad', word: 'Не допущен', note: 'Нарушений слишком много. Пройдите обучение заново.' };
+    const debrief = data.log.length
+      ? `<h2 class="fin-h">Разбор нарушений</h2>
+         <ol class="fin-log">${data.log
+           .map(
+             (e) => `<li>
+               <span class="fl-step">${esc(e.step)}</span>
+               <b>${esc(e.title)}</b>
+               <p>${esc(e.message)}</p>
+             </li>`,
+           )
+           .join('')}</ol>`
+      : '<p class="fin-clean">Нарушений не зафиксировано.</p>';
     el.innerHTML = `
       <div class="fin-box">
-        <div class="fin-medal">${ICON.medal}</div>
-        <h1>Обучение завершено</h1>
-        <p class="fin-sub">${esc(grade)}</p>
+        <div class="fin-verdict ${verdict.cls}"><b>${esc(verdict.word)}</b><span>${esc(verdict.note)}</span></div>
+        <h1>Протокол обучения</h1>
+        <p class="fin-sub">Вертикально-сверлильный станок 2Н135 · подготовка и сверление отверстия</p>
         <div class="fin-stats">
           <div><b>${fmtTime(data.time)}</b><span>время</span></div>
-          <div class="${data.errors ? 'bad' : 'good'}"><b>${data.errors}</b><span>ошибок</span></div>
+          <div class="${data.errors ? 'bad' : 'good'}"><b>${data.errors}</b><span>нарушений</span></div>
           <div><b>${data.hints}</b><span>подсказок</span></div>
         </div>
-        <ol class="fin-steps">${data.steps.map((s) => `<li><span>${esc(s.title)}</span><em class="${s.errors ? 'bad' : 'good'}">${s.errors ? `${s.errors} ош.` : ICON.check}</em></li>`).join('')}</ol>
+        <h2 class="fin-h">Этапы</h2>
+        <ol class="fin-steps">${data.steps.map((s) => `<li><span>${esc(s.title)}</span><em class="${s.errors ? 'bad' : 'good'}">${s.errors ? `${s.errors} наруш.` : ICON.check}</em></li>`).join('')}</ol>
+        ${debrief}
         <div class="fin-actions">
           <button class="btn ghost" id="finHome">В меню</button>
           <button class="btn primary" id="finAgain">Пройти ещё раз</button>
@@ -282,8 +339,8 @@ export class Hud {
       </div>`;
     el.classList.remove('hidden');
     gsap.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.3 });
-    gsap.fromTo(el.querySelector('.fin-medal'), { scale: 0, rotate: -40 }, { scale: 1, rotate: 0, duration: 0.8, ease: 'back.out(2.5)', delay: 0.15 });
-    gsap.fromTo(el.querySelectorAll('.fin-stats > div, .fin-steps li'), { opacity: 0, y: 12 }, { opacity: 1, y: 0, stagger: 0.06, duration: 0.4, delay: 0.35 });
+    gsap.fromTo(el.querySelector('.fin-verdict'), { opacity: 0, y: -14 }, { opacity: 1, y: 0, duration: 0.5, ease: 'power3.out', delay: 0.1 });
+    gsap.fromTo(el.querySelectorAll('.fin-stats > div, .fin-steps li, .fin-log li'), { opacity: 0, y: 12 }, { opacity: 1, y: 0, stagger: 0.05, duration: 0.4, delay: 0.3 });
     $('finAgain').addEventListener('click', () => {
       el.classList.add('hidden');
       onRestart();
@@ -296,5 +353,38 @@ export class Hud {
 
   hideFinish(): void {
     $('finish').classList.add('hidden');
+  }
+
+  reset(): void {
+    this.dismissDanger();
+    this.hideFinish();
+    this.bannerTl?.kill();
+    this.bannerTl = null;
+    this.gaugeOut = null;
+    this.panelSlot.innerHTML = '';
+    for (const id of ['alert', 'banner', 'pill', 'gauge']) {
+      const el = $(id);
+      gsap.killTweensOf(el);
+      el.classList.add('hidden');
+    }
+    const toasts = $('toasts');
+    gsap.killTweensOf(toasts.children);
+    toasts.innerHTML = '';
+    $('tbStep').textContent = '';
+    $('cardNum').textContent = '';
+    $('cardTitle').textContent = '';
+    $('cardText').textContent = '';
+    this.checklist.innerHTML = '';
+    this.items = [];
+    this.progressEl.innerHTML = '';
+    gsap.killTweensOf(this.card);
+    gsap.set(this.card, { opacity: 0 });
+    this.card.classList.remove('why-mode', 'collapsed');
+    this.whyBox.classList.add('hidden');
+    this.hintBox.classList.add('hidden');
+    this.nextHandler = null;
+    this.nextBtn.disabled = true;
+    this.nextBtn.textContent = 'Далее';
+    this.hintBtn.disabled = false;
   }
 }

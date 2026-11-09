@@ -5,6 +5,7 @@ import type { Hotspots, HotspotSpec } from '../ui/hotspots';
 import type { Highlighter } from '../fx/highlight';
 import type { Action, Ctx, Step, Target, Trap } from './types';
 import { ICON } from '../ui/icons';
+import { ABORT } from '../core/anim';
 
 interface StepStats {
   errors: number;
@@ -15,10 +16,12 @@ export class Trainer {
   private index = -1;
   private done = new Set<string>();
   private busy = false;
+  private running = 0;
   private finished = false;
   private panel: { close(): void } | null = null;
   private stats: StepStats[];
   private errors = 0;
+  private log: { step: string; title: string; message: string }[] = [];
   private hints = 0;
   private wrongStreak = 0;
   private startedAt = 0;
@@ -27,6 +30,7 @@ export class Trainer {
   private syncTimer = 0;
   private alive = true;
   private dangerOpen = false;
+  private dangerWait: Promise<void> | null = null;
   onFinish: () => void = () => {};
 
   constructor(
@@ -41,6 +45,10 @@ export class Trainer {
     ctx.isDone = (id) => this.done.has(id);
     hud.onHint = () => this.hint();
     hud.initProgress(steps.length);
+  }
+
+  private get locked(): boolean {
+    return this.busy || this.running > 0;
   }
 
   get step(): Step {
@@ -62,19 +70,25 @@ export class Trainer {
 
   private async fastForward(to: number): Promise<void> {
     const ctx = this.ctx;
-    ctx.sfx.muted = true;
+    ctx.sfx.silent = true;
+    this.busy = true;
     gsap.globalTimeline.timeScale(40);
-    for (let i = 0; i < to; i++) {
-      this.index = i;
-      this.done.clear();
-      for (const a of this.steps[i].actions) {
-        await a.run?.(ctx);
-        this.done.add(a.id);
+    try {
+      for (let i = 0; i < to; i++) {
+        this.index = i;
+        this.done.clear();
+        for (const a of this.steps[i].actions) {
+          await a.run?.(ctx);
+          this.done.add(a.id);
+        }
       }
+    } catch (e) {
+      if (e !== ABORT) throw e;
+    } finally {
+      ctx.chips.clear();
+      gsap.globalTimeline.timeScale(1);
+      ctx.sfx.silent = false;
     }
-    ctx.chips.clear();
-    gsap.globalTimeline.timeScale(1);
-    ctx.sfx.muted = false;
   }
 
   private async enter(i: number): Promise<void> {
@@ -95,7 +109,10 @@ export class Trainer {
     this.busy = false;
     if (s.panel) {
       this.panel = s.panel(this.ctx, {
-        complete: (id) => this.completeFromPanel(id),
+        complete: (id) => {
+          const a = this.step.actions.find((x) => x.id === id);
+          return a ? this.run(a) : Promise.resolve();
+        },
         mistake: (t, m) => void this.mistake(t, m),
         isDone: (id) => this.done.has(id),
       });
@@ -119,31 +136,31 @@ export class Trainer {
     const s = this.step;
     const avail = this.available();
     s.actions.forEach((a, i) => {
-      this.hud.setItemState(i, this.done.has(a.id) ? 'done' : avail.includes(a) && !this.busy ? 'active' : 'todo');
+      this.hud.setItemState(i, this.done.has(a.id) ? 'done' : avail.includes(a) && !this.locked ? 'active' : 'todo');
     });
     this.hud.setProgress(this.index, this.done.size / s.actions.length);
-    if (this.busy) {
+    if (this.locked) {
       this.highlighter.clear();
     } else {
       const objs = avail.filter((a) => a.target).map((a) => this.targets[a.target!].obj);
       this.highlighter.set(objs);
       if (s.ordered && avail[0] && avail[0].target && avail[0].view) this.ctx.focus(avail[0].view, 1.3);
       const auto = avail.find((a) => a.auto);
-      if (auto) void this.perform(auto);
+      if (auto) void this.run(auto);
     }
     this.syncHotspots(true);
   }
 
   private syncHotspots(force = false): void {
     const specs: HotspotSpec[] = [];
-    if (!this.busy && !this.finished) {
+    if (!this.locked && !this.finished) {
       for (const a of this.available()) {
         if (!a.target || a.auto) continue;
         const t = this.targets[a.target];
         specs.push({ id: `a:${a.id}`, obj: t.obj, offset: t.offset, label: a.hotspot ?? a.label, icon: ICON.check });
       }
     }
-    if (!this.finished) {
+    if (!this.finished && !this.busy) {
       for (const tr of this.activeTraps()) {
         const t = this.targets[tr.target];
         specs.push({ id: `t:${tr.id}`, obj: t.obj, offset: tr.offset ?? t.offset, label: tr.hotspot, icon: ICON.check });
@@ -169,33 +186,28 @@ export class Trainer {
   }
 
   private onHotspot(id: string): void {
+    if (!this.alive || this.finished) return;
     if (id.startsWith('t:')) {
+      if (this.busy) return;
       const trap = this.step.traps?.find((t) => `t:${t.id}` === id);
       if (trap) void this.triggerTrap(trap);
       return;
     }
     const a = this.step.actions.find((x) => `a:${x.id}` === id);
-    if (a && !this.busy && this.available().includes(a)) {
-      const t = this.targets[a.target!];
-      const p = this.hotspots.screenPos(t.obj, t.offset);
-      this.hud.burst(p.x, p.y);
-      void this.perform(a);
-    }
+    if (a && !this.locked && this.available().includes(a)) this.launch(a);
   }
 
   objectTapped(name: string): void {
-    if (this.busy || this.finished || this.index < 0 || this.dangerOpen) return;
+    if (!this.alive || this.finished || this.index < 0 || this.dangerOpen || this.busy) return;
     const trap = this.activeTraps().find((t) => t.target === name);
     if (trap) {
       void this.triggerTrap(trap);
       return;
     }
+    if (this.locked) return;
     const a = this.available().find((x) => x.target === name && !x.auto);
     if (a) {
-      const t = this.targets[name];
-      const p = this.hotspots.screenPos(t.obj, t.offset);
-      this.hud.burst(p.x, p.y);
-      void this.perform(a);
+      this.launch(a);
       return;
     }
     this.ctx.sfx.tap();
@@ -209,36 +221,32 @@ export class Trainer {
     }
   }
 
-  private async perform(a: Action): Promise<void> {
-    this.busy = true;
+  private launch(a: Action): void {
+    const t = this.targets[a.target!];
+    const p = this.hotspots.screenPos(t.obj, t.offset);
+    this.hud.burst(p.x, p.y);
+    void this.run(a);
+  }
+
+  private async run(a: Action): Promise<void> {
+    if (!this.alive || this.finished || this.done.has(a.id)) return;
+    this.running++;
     this.wrongStreak = 0;
     this.hud.setHint(null);
     this.refresh();
     try {
       await a.run?.(this.ctx);
+    } catch (e) {
+      if (e !== ABORT) throw e;
+      return;
     } finally {
-      this.busy = false;
+      this.running--;
     }
     if (!this.alive) return;
     this.done.add(a.id);
     this.ctx.sfx.success();
-    this.afterAction();
-  }
-
-  private async completeFromPanel(id: string): Promise<void> {
-    const a = this.step.actions.find((x) => x.id === id);
-    if (!a || this.done.has(id)) return;
-    this.busy = true;
-    this.hud.setHint(null);
-    this.refresh();
-    try {
-      await a.run?.(this.ctx);
-    } finally {
-      this.busy = false;
-    }
+    if (this.dangerWait) await this.dangerWait;
     if (!this.alive) return;
-    this.done.add(id);
-    this.ctx.sfx.success();
     this.afterAction();
   }
 
@@ -251,6 +259,7 @@ export class Trainer {
   }
 
   private async completeStep(): Promise<void> {
+    if (this.busy) return;
     const s = this.step;
     this.refresh();
     this.hotspots.clear();
@@ -264,6 +273,7 @@ export class Trainer {
     const last = this.index === this.steps.length - 1;
     this.busy = true;
     this.hud.showWhy(s.why, last, () => {
+      if (!this.alive) return;
       this.busy = false;
       if (last) this.finish();
       else void this.enter(this.index + 1);
@@ -271,6 +281,7 @@ export class Trainer {
   }
 
   private finish(): void {
+    if (!this.alive || this.finished) return;
     this.finished = true;
     this.hud.setProgress(this.steps.length, 0);
     this.hotspots.clear();
@@ -285,29 +296,35 @@ export class Trainer {
       errors: this.errors,
       hints: this.hints,
       steps: this.steps.map((s, i) => ({ title: s.title, errors: this.stats[i].errors, hints: this.stats[i].hints })),
+      log: this.log.slice(),
     };
   }
 
   private async triggerTrap(trap: Trap): Promise<void> {
-    if (this.dangerOpen) return;
-    void trap.run?.(this.ctx);
+    if (!this.alive || this.dangerOpen) return;
+    void trap.run?.(this.ctx)?.catch((e) => {
+      if (e !== ABORT) console.error(e);
+    });
     await this.mistake(trap.title, trap.message);
   }
 
   private async mistake(title: string, message: string): Promise<void> {
-    if (this.dangerOpen) return;
+    if (!this.alive || this.finished || this.dangerOpen) return;
     this.dangerOpen = true;
     this.errors++;
     this.stats[this.index].errors++;
+    this.log.push({ step: this.step.title, title, message });
     this.hud.bumpStat('stErr');
     this.ctx.sfx.error();
     if (navigator.vibrate) navigator.vibrate([60, 40, 60]);
-    await this.hud.danger(title, message);
+    this.dangerWait = this.hud.danger(title, message);
+    await this.dangerWait;
+    this.dangerWait = null;
     this.dangerOpen = false;
   }
 
   hint(): void {
-    if (this.finished || this.index < 0) return;
+    if (!this.alive || this.finished || this.index < 0 || this.busy || this.dangerOpen) return;
     const avail = this.available();
     if (!avail.length) return;
     this.hints++;

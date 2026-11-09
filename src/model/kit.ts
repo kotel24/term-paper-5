@@ -56,3 +56,7 @@ export function tube(points: THREE.Vector3[], r: number, mat: THREE.Material, se
   const curve = new THREE.CatmullRomCurve3(points);
   return mesh(new THREE.TubeGeometry(curve, seg, r, 10, false), mat);
 }
+
+export function fmtNum(v: number): string {
+  return String(v).replace('.', ',');
+}

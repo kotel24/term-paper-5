@@ -1,6 +1,8 @@
 import gsap from 'gsap';
 import { ICON } from './icons';
 import { FEEDS, SPEEDS } from '../model/machine';
+import { fmtNum } from '../model/kit';
+import { CUT } from '../scenario/cutting';
 import type { Ctx, PanelApi } from '../scenario/types';
 
 interface PpeOption {
@@ -76,25 +78,21 @@ export function ppePanel(_ctx: Ctx, api: PanelApi): { close(): void } {
   return mount(root);
 }
 
-function fmt(v: number): string {
-  return String(v).replace('.', ',');
-}
-
 export function modesPanel(_ctx: Ctx, api: PanelApi): { close(): void } {
   const root = document.createElement('div');
   root.className = 'modes';
   root.innerHTML = `
     <div class="task">
-      <div class="task-row"><span>Сверло</span><b>Ø12 мм, Р6М5</b></div>
+      <div class="task-row"><span>Сверло</span><b>Ø${CUT.d} мм, Р6М5</b></div>
       <div class="task-row"><span>Материал</span><b>Сталь 45</b></div>
-      <div class="task-row"><span>Скорость резания</span><b>v = 25 м/мин</b></div>
-      <div class="task-row"><span>Рекомендуемая подача</span><b>s = 0,18 мм/об</b></div>
+      <div class="task-row"><span>Скорость резания</span><b>v = ${CUT.v} м/мин</b></div>
+      <div class="task-row"><span>Рекомендуемая подача</span><b>s = ${fmtNum(CUT.sRec)} мм/об</b></div>
     </div>
-    <div class="formula">n = <span class="frac"><i>1000 · v</i><i>π · D</i></span> = <span class="frac"><i>1000 · 25</i><i>3,14 · 12</i></span> ≈ <b>663 об/мин</b></div>
+    <div class="formula">n = <span class="frac"><i>1000 · v</i><i>π · D</i></span> = <span class="frac"><i>1000 · ${CUT.v}</i><i>3,14 · ${CUT.d}</i></span> ≈ <b>${CUT.n} об/мин</b></div>
     <div class="row-title">Частота вращения, об/мин <span class="row-state" data-for="speed"></span></div>
-    <div class="chips" data-row="speed">${SPEEDS.map((v) => `<button type="button" data-v="${v}">${fmt(v)}</button>`).join('')}</div>
+    <div class="chips" data-row="speed">${SPEEDS.map((v) => `<button type="button" data-v="${v}">${fmtNum(v)}</button>`).join('')}</div>
     <div class="row-title">Подача, мм/об <span class="row-state" data-for="feed"></span></div>
-    <div class="chips locked" data-row="feed">${FEEDS.map((v) => `<button type="button" data-v="${v}">${fmt(v)}</button>`).join('')}</div>
+    <div class="chips locked" data-row="feed">${FEEDS.map((v) => `<button type="button" data-v="${v}">${fmtNum(v)}</button>`).join('')}</div>
   `;
   const speedRow = root.querySelector('[data-row="speed"]') as HTMLElement;
   const feedRow = root.querySelector('[data-row="feed"]') as HTMLElement;
@@ -105,17 +103,17 @@ export function modesPanel(_ctx: Ctx, api: PanelApi): { close(): void } {
   };
 
   if (api.isDone('speed')) {
-    mark(speedRow, 500);
+    mark(speedRow, CUT.speed);
     feedRow.classList.remove('locked');
   }
-  if (api.isDone('feed')) mark(feedRow, 0.14);
+  if (api.isDone('feed')) mark(feedRow, CUT.feed);
 
   let busy = false;
   speedRow.addEventListener('click', async (e) => {
     const b = (e.target as HTMLElement).closest('button');
     if (!b || busy || speedRow.classList.contains('done')) return;
     const v = Number(b.dataset.v);
-    if (v === 500) {
+    if (v === CUT.speed) {
       busy = true;
       mark(speedRow, v);
       gsap.fromTo(b, { scale: 0.85 }, { scale: 1, duration: 0.5, ease: 'elastic.out(1, 0.4)' });
@@ -127,10 +125,10 @@ export function modesPanel(_ctx: Ctx, api: PanelApi): { close(): void } {
       return;
     }
     flashBad(b);
-    if (v > 663) {
-      api.mistake('Частота выше расчётной', `Ступень ${fmt(v)} об/мин больше расчётных 663 об/мин. Скорость резания превысит допустимую, сверло перегреется, затупится и может сломаться.`);
+    if (v > CUT.n) {
+      api.mistake('Частота выше расчётной', `Ступень ${fmtNum(v)} об/мин больше расчётных ${CUT.n} об/мин. Скорость резания превысит допустимую, сверло перегреется, затупится и может сломаться.`);
     } else {
-      api.mistake('Частота слишком мала', `На ступени ${fmt(v)} об/мин сверло режет неэффективно и быстрее изнашивается. Выбирают ближайшую к расчётной меньшую ступень.`);
+      api.mistake('Частота слишком мала', `На ступени ${fmtNum(v)} об/мин сверло режет неэффективно и быстрее изнашивается. Выбирают ближайшую к расчётной меньшую ступень.`);
     }
   });
 
@@ -138,7 +136,7 @@ export function modesPanel(_ctx: Ctx, api: PanelApi): { close(): void } {
     const b = (e.target as HTMLElement).closest('button');
     if (!b || busy || feedRow.classList.contains('locked') || feedRow.classList.contains('done')) return;
     const v = Number(b.dataset.v);
-    if (v === 0.14) {
+    if (v === CUT.feed) {
       busy = true;
       mark(feedRow, v);
       gsap.fromTo(b, { scale: 0.85 }, { scale: 1, duration: 0.5, ease: 'elastic.out(1, 0.4)' });
@@ -147,10 +145,10 @@ export function modesPanel(_ctx: Ctx, api: PanelApi): { close(): void } {
       return;
     }
     flashBad(b);
-    if (v > 0.18) {
-      api.mistake('Подача больше рекомендуемой', `Подача ${fmt(v)} мм/об перегружает сверло Ø12: растёт осевая сила, сверло может сломаться, а обломки разлетаются.`);
+    if (v > CUT.sRec) {
+      api.mistake('Подача больше рекомендуемой', `Подача ${fmtNum(v)} мм/об перегружает сверло Ø${CUT.d}: растёт осевая сила, сверло может сломаться, а обломки разлетаются.`);
     } else {
-      api.mistake('Подача слишком мала', `При подаче ${fmt(v)} мм/об сверло трётся, а не режет, и быстро тупится. Выберите ближайшее к 0,18 меньшее значение.`);
+      api.mistake('Подача слишком мала', `При подаче ${fmtNum(v)} мм/об сверло трётся, а не режет, и быстро тупится. Выберите ближайшее к ${fmtNum(CUT.sRec)} меньшее значение.`);
     }
   });
 

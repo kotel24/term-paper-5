@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { M, DRILL_MAT, DRILL_TIP_MAT } from './materials';
-import { box, canvasTexture, cyl, group, hexBolt, mesh, put, rbox, sphere, tube } from './kit';
+import { box, canvasTexture, cyl, fmtNum, group, hexBolt, mesh, put, rbox, sphere, tube } from './kit';
 
 export const AX = 0;
 export const AZ = 0.3;
@@ -28,10 +28,6 @@ export const JAW_OPEN = 0.055;
 export const SPEEDS = [31.5, 45, 63, 90, 125, 180, 250, 355, 500, 710, 1000, 1400];
 export const FEEDS = [0.1, 0.14, 0.2, 0.28, 0.4, 0.56, 0.8, 1.12, 1.6];
 
-function fmt(v: number): string {
-  return String(v).replace('.', ',');
-}
-
 function dialTexture(values: number[], title: string, accent: string): THREE.CanvasTexture {
   return canvasTexture(512, 512, (ctx, w) => {
     const c = w / 2;
@@ -58,7 +54,7 @@ function dialTexture(values: number[], title: string, accent: string): THREE.Can
       ctx.fillRect(-4, -c + 18, 8, 26);
       ctx.fillStyle = '#f2f4f5';
       ctx.font = `bold ${values.length > 10 ? 40 : 46}px Arial`;
-      ctx.fillText(fmt(v), 0, -c + 78);
+      ctx.fillText(fmtNum(v), 0, -c + 78);
       ctx.restore();
     });
     ctx.fillStyle = '#9aa3aa';
@@ -68,18 +64,48 @@ function dialTexture(values: number[], title: string, accent: string): THREE.Can
 }
 
 function panelTexture(): THREE.CanvasTexture {
-  return canvasTexture(260, 340, (ctx, w, h) => {
+  return canvasTexture(300, 400, (ctx, w, h) => {
     ctx.fillStyle = '#1b1d1f';
     ctx.fillRect(0, 0, w, h);
     ctx.strokeStyle = '#6e767d';
     ctx.lineWidth = 6;
     ctx.strokeRect(6, 6, w - 12, h - 12);
-    ctx.fillStyle = '#f2f4f5';
     ctx.textAlign = 'center';
-    ctx.font = 'bold 26px Arial';
-    ctx.fillText('СЕТЬ', w / 2, 118);
-    ctx.fillText('ПУСК', w * 0.27, 300);
-    ctx.fillText('СТОП', w * 0.73, 300);
+    ctx.fillStyle = '#f2f4f5';
+    ctx.font = 'bold 21px Arial';
+    ctx.fillText('СТАНОК', w / 2, 112);
+    ctx.fillText('ВКЛЮЧЕН', w / 2, 136);
+    ctx.strokeStyle = '#4b5258';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(22, 160);
+    ctx.lineTo(w - 22, 160);
+    ctx.stroke();
+    ctx.font = 'bold 18px Arial';
+    ctx.fillStyle = '#b9c0c6';
+    ctx.fillText('ЛЕВОЕ ВРАЩ.', w / 2, 256);
+    ctx.font = 'bold 24px Arial';
+    ctx.fillStyle = '#f2f4f5';
+    ctx.fillText('ПУСК', w * 0.27, 374);
+    ctx.fillText('СТОП', w * 0.73, 374);
+  });
+}
+
+function warningPlateTexture(lines: string[]): THREE.CanvasTexture {
+  return canvasTexture(512, 192, (ctx, w, h) => {
+    ctx.fillStyle = '#fad201';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#282828';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(10, 10, w - 20, h - 20);
+    ctx.fillStyle = '#282828';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const size = Math.min(46, 300 / Math.max(...lines.map((l) => l.length)) * 7);
+    ctx.font = `bold ${Math.round(size)}px Arial`;
+    const step = size * 1.3;
+    const top = h / 2 - ((lines.length - 1) * step) / 2;
+    lines.forEach((l, i) => ctx.fillText(l, w / 2, top + i * step));
   });
 }
 
@@ -129,7 +155,7 @@ function groundSignTexture(): THREE.CanvasTexture {
 
 function switchTexture(): THREE.CanvasTexture {
   return canvasTexture(128, 128, (ctx, w) => {
-    ctx.fillStyle = '#f2b705';
+    ctx.fillStyle = '#fad201';
     ctx.beginPath();
     ctx.arc(w / 2, w / 2, w / 2 - 2, 0, Math.PI * 2);
     ctx.fill();
@@ -213,6 +239,8 @@ export class Machine {
   chipsSpot!: THREE.Object3D;
   cartTop!: THREE.Object3D;
 
+  readonly lampMat = M.lamp.clone();
+  readonly wireMat = Object.assign(M.wire.clone(), { emissive: new THREE.Color(0x3dff7a), emissiveIntensity: 0 });
   omega = 0;
   quillOffset = 0;
 
@@ -232,6 +260,7 @@ export class Machine {
     this.buildBrush();
     this.chipsSpot = put(this.root, new THREE.Object3D(), AX + 0.03, WORK_TOP + 0.01, AZ + 0.02);
     this.setJaws(1);
+    this.setLamp(false);
   }
 
   update(dt: number): void {
@@ -257,7 +286,7 @@ export class Machine {
   }
 
   setLamp(on: boolean): void {
-    M.lamp.emissiveIntensity = on ? 2.2 : 0;
+    this.lampMat.emissiveIntensity = on ? 2.2 : 0;
   }
 
   speedAngle(i: number): number {
@@ -287,9 +316,9 @@ export class Machine {
 
   private buildColumn(): void {
     const r = this.root;
-    put(r, rbox(0.27, 1.86, 0.27, 0.03, M.paint), 0, BASE_TOP + 0.93, -0.135);
-    for (const x of [-0.085, 0.085]) {
-      put(r, box(0.05, 1.8, 0.024, M.machined), x, BASE_TOP + 0.92, 0.01);
+    put(r, rbox(0.38, 1.86, 0.3, 0.03, M.paint), 0, BASE_TOP + 0.93, -0.15);
+    for (const x of [-0.1, 0.1]) {
+      put(r, box(0.055, 1.8, 0.024, M.machined), x, BASE_TOP + 0.92, 0.01);
     }
     put(r, box(0.02, 1.2, 0.012, M.oxide), 0, 0.95, 0.01);
     put(r, tube([
@@ -301,7 +330,7 @@ export class Machine {
     const cab = group('cabinet');
     put(cab, rbox(0.08, 0.42, 0.22, 0.01, M.paintDark), 0, 0, 0);
     put(cab, box(0.004, 0.36, 0.17, M.paint), -0.041, 0, 0);
-    put(r, cab, -0.175, 1.05, -0.135);
+    put(r, cab, -0.235, 1.05, -0.15);
     this.mainSwitch = group('mainSwitch');
     const plate = cyl(0.035, 0.035, 0.006, new THREE.MeshStandardMaterial({ map: switchTexture(), roughness: 0.5 }), 32);
     plate.rotation.z = Math.PI / 2;
@@ -314,7 +343,7 @@ export class Machine {
     handle.position.x = -0.01;
     handle.name = 'switchHandle';
     this.mainSwitch.add(handle);
-    put(r, this.mainSwitch, -0.218, 1.12, -0.135);
+    put(r, this.mainSwitch, -0.278, 1.12, -0.15);
   }
 
   private buildTable(): void {
@@ -330,7 +359,7 @@ export class Machine {
     wg.rotateY(-Math.PI / 2);
     wg.translate(0.04, 0, 0);
     put(t, mesh(wg, M.paint), 0, TABLE_TOP - 0.06, 0.17);
-    put(t, rbox(0.5, 0.06, 0.45, 0.012, M.paint), AX, TABLE_TOP - 0.03, AZ);
+    put(t, rbox(0.5, 0.06, 0.45, 0.012, M.yellow), AX, TABLE_TOP - 0.03, AZ);
     put(t, box(0.49, 0.004, 0.44, M.machined), AX, TABLE_TOP - 0.002, AZ);
     for (const x of [-0.12, 0, 0.12]) {
       put(t, box(0.02, 0.002, 0.442, M.slot), x, TABLE_TOP + 0.0005, AZ);
@@ -408,12 +437,12 @@ export class Machine {
     limb.rotation.z = Math.PI / 2;
     limb.position.x = -0.03;
     this.handwheel.add(limb);
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * Math.PI * 2;
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
       const arm = group();
-      const spoke = put(arm, cyl(0.009, 0.012, 0.19, M.machined, 16), 0, 0.1, 0);
+      const spoke = put(arm, cyl(0.009, 0.013, 0.22, M.machined, 16), 0, 0.115, 0);
       spoke.castShadow = true;
-      put(arm, sphere(0.024, M.bakelite), 0, 0.2, 0);
+      put(arm, sphere(0.027, M.bakelite), 0, 0.232, 0);
       arm.position.x = 0.03;
       arm.rotation.x = a;
       this.handwheel.add(arm);
@@ -469,12 +498,16 @@ export class Machine {
 
   private buildControls(): void {
     const panel = group('panel');
-    put(panel, box(0.13, 0.17, 0.006, new THREE.MeshStandardMaterial({ map: panelTexture(), roughness: 0.6 })), 0, 0, 0);
+    put(panel, box(0.15, 0.2, 0.006, new THREE.MeshStandardMaterial({ map: panelTexture(), roughness: 0.6 })), 0, 0, 0);
     this.btnStart = group('btnStart');
     put(this.btnStart, cyl(0.02, 0.02, 0.008, M.steelDark, 24), 0, 0, 0).rotation.x = Math.PI / 2;
     const g = put(this.btnStart, cyl(0.014, 0.014, 0.014, M.green, 24), 0, 0, 0.01);
     g.rotation.x = Math.PI / 2;
-    put(panel, this.btnStart, -0.035, -0.03, 0.004);
+    put(panel, this.btnStart, -0.038, -0.047, 0.004);
+    const btnRev = group('btnReverse');
+    put(btnRev, cyl(0.018, 0.018, 0.008, M.steelDark, 24), 0, 0, 0).rotation.x = Math.PI / 2;
+    put(btnRev, cyl(0.012, 0.012, 0.012, M.black, 24), 0, 0, 0.009).rotation.x = Math.PI / 2;
+    put(panel, btnRev, 0, 0.012, 0.004);
     this.btnStop = group('btnStop');
     put(this.btnStop, cyl(0.02, 0.02, 0.008, M.steelDark, 24), 0, 0, 0).rotation.x = Math.PI / 2;
     put(this.btnStop, cyl(0.01, 0.01, 0.012, M.red, 16), 0, 0, 0.008).rotation.x = Math.PI / 2;
@@ -483,16 +516,16 @@ export class Machine {
     mush.scale.set(1, 0.45, 1);
     mush.position.z = 0.013;
     this.btnStop.add(mush);
-    put(panel, this.btnStop, 0.035, -0.03, 0.004);
-    this.lamp = mesh(new THREE.SphereGeometry(0.012, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.lamp);
+    put(panel, this.btnStop, 0.038, -0.047, 0.004);
+    this.lamp = mesh(new THREE.SphereGeometry(0.012, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), this.lampMat);
     this.lamp.rotation.x = Math.PI / 2;
-    put(panel, this.lamp, 0, 0.055, 0.004);
-    put(panel, cyl(0.016, 0.016, 0.006, M.steelDark, 20), 0, 0.055, 0.002).rotation.x = Math.PI / 2;
+    put(panel, this.lamp, 0, 0.072, 0.004);
+    put(panel, cyl(0.016, 0.016, 0.006, M.steelDark, 20), 0, 0.072, 0.002).rotation.x = Math.PI / 2;
     this.controlPanel = panel;
-    put(this.root, panel, -0.12, 1.66, 0.523);
+    put(this.root, panel, -0.125, 1.67, 0.523);
 
     this.speedDial = group('speedDial');
-    const sd = mesh(new THREE.CircleGeometry(0.075, 64), new THREE.MeshStandardMaterial({ map: dialTexture(SPEEDS, 'об/мин', '#ffc21a'), roughness: 0.4, metalness: 0.2 }));
+    const sd = mesh(new THREE.CircleGeometry(0.075, 64), new THREE.MeshStandardMaterial({ map: dialTexture(SPEEDS, 'об/мин', '#fad201'), roughness: 0.4, metalness: 0.2 }));
     this.speedDial.add(sd);
     put(this.speedDial, cyl(0.022, 0.026, 0.02, M.machined, 32), 0, 0, 0.01).rotation.x = Math.PI / 2;
     const lever = put(this.speedDial, box(0.012, 0.05, 0.012, M.machined), 0, -0.035, 0.022);
@@ -502,9 +535,14 @@ export class Machine {
     const sp = mesh(new THREE.ConeGeometry(0.009, 0.018, 3), M.red);
     sp.rotation.z = Math.PI;
     put(this.root, sp, 0.0, 1.995 + 0.087, 0.445);
+    const warn = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.105, 0.04),
+      new THREE.MeshStandardMaterial({ map: warningPlateTexture(['МЕНЯТЬ СКОРОСТЬ', 'ТОЛЬКО ПРИ ОСТАНОВКЕ']), roughness: 0.45 }),
+    );
+    put(this.root, warn, 0.13, 1.995, 0.4415);
 
     this.feedDial = group('feedDial');
-    const fd = mesh(new THREE.CircleGeometry(0.058, 64), new THREE.MeshStandardMaterial({ map: dialTexture(FEEDS, 'мм/об', '#4fc3f7'), roughness: 0.4, metalness: 0.2 }));
+    const fd = mesh(new THREE.CircleGeometry(0.058, 64), new THREE.MeshStandardMaterial({ map: dialTexture(FEEDS, 'мм/об', '#e8ecef'), roughness: 0.4, metalness: 0.2 }));
     this.feedDial.add(fd);
     put(this.feedDial, cyl(0.018, 0.022, 0.018, M.machined, 32), 0, 0, 0.009).rotation.x = Math.PI / 2;
     put(this.feedDial, box(0.01, 0.04, 0.01, M.machined), 0, -0.028, 0.02);
@@ -528,11 +566,15 @@ export class Machine {
       new THREE.Vector3(0.37, 0.006, 0.76),
       new THREE.Vector3(0.42, 0.006, 1.1),
       new THREE.Vector3(0.5, 0.006, 1.6),
-    ], 0.007, M.wire, 96);
-    (M.wire.map as THREE.Texture).repeat.set(6, 1);
+    ], 0.007, this.wireMat, 96);
     this.root.add(this.groundWire);
     const sign = new THREE.Mesh(new THREE.CircleGeometry(0.03, 32), new THREE.MeshStandardMaterial({ map: groundSignTexture(), roughness: 0.5 }));
-    put(this.root, sign, 0.22, 0.06, 0.631);
+    put(this.root, sign, 0.22, 0.075, 0.631);
+    const groundLabel = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.085, 0.032),
+      new THREE.MeshStandardMaterial({ map: warningPlateTexture(['ЗАЗЕМЛЕНИЕ']), roughness: 0.45 }),
+    );
+    put(this.root, groundLabel, 0.22, 0.027, 0.631);
   }
 
   private buildCart(): void {

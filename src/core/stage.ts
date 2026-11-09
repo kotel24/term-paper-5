@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { isShared } from '../model/materials';
 
 export type Vec3 = [number, number, number];
 
@@ -34,6 +35,30 @@ export function makeEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
   return env;
 }
 
+export function visibleInTree(obj: THREE.Object3D): boolean {
+  let o: THREE.Object3D | null = obj;
+  while (o) {
+    if (!o.visible) return false;
+    o = o.parent;
+  }
+  return true;
+}
+
+function disposeMaterial(mat: THREE.Material): void {
+  if (isShared(mat)) return;
+  for (const v of Object.values(mat)) if (v instanceof THREE.Texture && !isShared(v)) v.dispose();
+  mat.dispose();
+}
+
+export function disposeTree(root: THREE.Object3D): void {
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    m.geometry.dispose();
+    for (const mat of Array.isArray(m.material) ? m.material : [m.material]) disposeMaterial(mat);
+  });
+}
+
 export interface Lights {
   key: THREE.DirectionalLight;
   group: THREE.Group;
@@ -42,9 +67,9 @@ export interface Lights {
 export function makeLights(): Lights {
   const group = new THREE.Group();
   group.name = 'lights';
-  const hemi = new THREE.HemisphereLight(0xdfe9f3, 0x3a3228, 0.9);
+  const hemi = new THREE.HemisphereLight(0xc8d8e8, 0x2a2622, 0.42);
   group.add(hemi);
-  const key = new THREE.DirectionalLight(0xfff4e2, 2.4);
+  const key = new THREE.DirectionalLight(0xffeed0, 3.3);
   key.position.set(1.6, 3.4, 2.2);
   key.target.position.set(0.25, 0.9, 0.25);
   key.castShadow = true;
@@ -59,10 +84,10 @@ export function makeLights(): Lights {
   c.near = 0.5;
   c.far = 7;
   group.add(key, key.target);
-  const fill = new THREE.DirectionalLight(0xcfe0ff, 0.7);
+  const fill = new THREE.DirectionalLight(0x9fc0ff, 0.34);
   fill.position.set(-2.2, 1.8, 1.2);
   group.add(fill);
-  const rim = new THREE.DirectionalLight(0xffffff, 0.8);
+  const rim = new THREE.DirectionalLight(0xdfeaff, 1.25);
   rim.position.set(-0.5, 2.5, -2.5);
   group.add(rim);
   return { key, group };

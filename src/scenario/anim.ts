@@ -1,24 +1,8 @@
 import * as THREE from 'three';
-import gsap from 'gsap';
+import { to } from '../core/anim';
 import type { Ctx } from './types';
 
 export const OMEGA = 26;
-
-export function play(anim: gsap.core.Animation): Promise<void> {
-  return new Promise((resolve) => {
-    anim.eventCallback('onComplete', () => resolve());
-  });
-}
-
-export function to(target: object, vars: gsap.TweenVars): Promise<void> {
-  return play(gsap.to(target, vars));
-}
-
-export function wait(seconds: number): Promise<void> {
-  return new Promise((resolve) => {
-    gsap.delayedCall(seconds, resolve);
-  });
-}
 
 const tmpQ = new THREE.Quaternion();
 

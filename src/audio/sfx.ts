@@ -7,6 +7,7 @@ export class Sfx {
   private motor: { osc: OscillatorNode[]; gain: GainNode; filter: BiquadFilterNode } | null = null;
   private drill: { gain: GainNode; filter: BiquadFilterNode } | null = null;
   muted = false;
+  silent = false;
 
   unlock(): void {
     if (!this.ctx) {
@@ -29,7 +30,7 @@ export class Sfx {
   }
 
   private ready(): Ctx | null {
-    if (!this.ctx || !this.master || this.muted) return null;
+    if (!this.ctx || !this.master || this.muted || this.silent) return null;
     return this.ctx;
   }
 

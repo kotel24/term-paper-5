@@ -603,7 +603,7 @@ export class Machine {
     for (const x of [-0.065, 0.065]) {
       put(v, box(0.02, 0.03, 0.27, M.machined), x, 0.035, 0.06);
     }
-    put(v, rbox(0.17, 0.07, 0.05, 0.006, M.paintDark), 0, 0.055, -0.06);
+    put(v, rbox(0.17, 0.07, 0.05, 0.006, M.paintDark), 0, 0.055, -0.062);
     put(v, box(0.15, 0.035, 0.004, M.oxide), 0, 0.068, -0.037);
     put(v, rbox(0.12, 0.05, 0.02, 0.004, M.paintDark), 0, 0.035, 0.195);
     for (const z of [-0.028, 0.028]) {
